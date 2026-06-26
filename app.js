@@ -48,7 +48,7 @@ const TURMAS_GRUPOS = [
     turmas: ['1°DS', '2°DS', '3°DS']
   },
   {
-    grupo: 'Finanças / Administração',
+    grupo: 'Formação de Docentes',
     turmas: ['1°FD', '2°FD', '3°FD']
   },
   {
