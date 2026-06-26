@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Barbosa Dog</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="brand-icon">🌭</span>
+      <span class="brand-name">Barbosa Dog</span>
+    </div>
+    <div class="topbar-right">
+      <nav class="nav-tabs" style="display: none;">
+        <button class="nav-btn active" onclick="showView('client', this)">Fazer Pedido</button>
+        <button class="nav-btn" onclick="showView('admin', this)">Painel Admin</button>
+      </nav>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Alternar tema">
+        <span id="theme-icon">☀️</span>
+      </button>
+      <div class="user-badge" id="user-profile-badge" style="display: none;">
+        <img class="user-photo" id="user-photo" src="" alt="Foto" />
+        <button class="btn-logout" onclick="logout()" title="Sair">🚪</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══════════════ VIEW: LOGIN ══════════════ -->
+  <div class="view active" id="view-login">
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-logo">🌭</div>
+        <h1 class="login-title">Barbosa Dog</h1>
+        <p class="login-subtitle">Faça login com sua conta do Google para continuar</p>
+        <button class="btn-google" onclick="loginWithGoogle()">
+          <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="#4285F4"
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+            <path fill="#34A853"
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+            <path fill="#FBBC05"
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.85z" />
+            <path fill="#EA4335"
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.85c.87-2.6 3.3-4.53 6.16-4.53z" />
+          </svg>
+          <span>Entrar com o Google</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ VIEW: CLIENTE ══════════════ -->
+  <div class="view" id="view-client">
+
+    <!-- TELA 1: IDENTIFICAÇÃO -->
+    <div id="screen-identify" class="client-wrap">
+      <div class="identify-header">
+        <div class="identify-title">Quem é você?</div>
+        <div class="identify-sub">Selecione sua turma e escreva seu nome</div>
+      </div>
+
+      <!-- TURMAS -->
+      <div class="section-label">1. Sua turma</div>
+      <div class="turma-chips" id="turma-chips"><!-- gerado por JS --></div>
+
+      <!-- NOME (aparece após escolher turma) -->
+      <div id="nome-section" style="display:none;">
+        <div class="section-label" style="margin-top:1.25rem;">2. Seu nome completo</div>
+        <input class="input-field" type="text" id="customer-name" placeholder="Digite seu nome..."
+          oninput="onNomeInput()" autocomplete="off" />
+        <!-- STATUS após digitar nome -->
+        <div id="student-status-box"></div>
+      </div>
+
+      <div class="error-box" id="id-error-box"></div>
+      <button class="btn-primary" id="btn-continuar" onclick="continuar()" style="display:none; margin-top:1rem;">
+        Continuar para o pedido →
+      </button>
+    </div>
+
+    <!-- TELA 2: PEDIDO -->
+    <div id="screen-order" class="client-wrap" style="display:none;">
+
+      <!-- PILL do aluno -->
+      <div class="student-pill">
+        <span id="pill-name"></span>
+        <button onclick="voltarIdentificacao()">Trocar</button>
+      </div>
+
+      <!-- PÃO -->
+      <div class="section-label">Escolha o pão</div>
+      <div class="bread-grid">
+
+        <div class="bread-card" id="bread-medio" onclick="selectBread('medio')">
+          <!-- 🖼️ PÃO MÉDIO: apague o placeholder e descomente a img abaixo -->
+          <!-- <img src="imagens/pao-medio.jpg" alt="Pão médio" class="card-img" /> -->
+          <div class="card-img-placeholder">🌭<br><span>Adicione imagem aqui</span></div>
+          <div class="card-body">
+            <div class="bread-name">Pão médio</div>
+            <div class="bread-price">R$ 10,00</div>
+            <div class="bread-limit">máx. 3 complementos</div>
+          </div>
+        </div>
+
+        <div class="bread-card" id="bread-grande" onclick="selectBread('grande')">
+          <!-- 🖼️ PÃO GRANDE: apague o placeholder e descomente a img abaixo -->
+          <!-- <img src="imagens/pao-grande.jpg" alt="Pão grande" class="card-img" /> -->
+          <div class="card-img-placeholder">🌭<br><span>Adicione imagem aqui</span></div>
+          <div class="card-body">
+            <div class="bread-name">Pão grande</div>
+            <div class="bread-price">R$ 15,00</div>
+            <div class="bread-limit">complementos à vontade</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- COMPLEMENTOS -->
+      <div class="section-label">Complementos</div>
+      <div id="limit-warn" class="warn-box" style="display:none;">
+        ⚠️ Pão médio: máximo 3 complementos. Remova um para trocar.
+      </div>
+      <div class="comps-grid" id="comps-grid">
+
+        <div class="comp-item disabled" data-name="Batata palha extra" data-price="1.00" onclick="toggleComp(this)">
+          <!-- 🖼️ <img src="imagens/batata-palha.jpg" class="comp-img" /> -->
+          <div class="comp-img-placeholder">🥔</div>
+          <div class="comp-info">
+            <span class="comp-name">Batata palha extra</span>
+            <span class="comp-price">+R$ 1,00</span>
+          </div>
+          <span class="comp-check">✓</span>
+        </div>
+
+        <div class="comp-item disabled" data-name="Milho" data-price="1.00" onclick="toggleComp(this)">
+          <!-- 🖼️ <img src="imagens/milho.jpg" class="comp-img" /> -->
+          <div class="comp-img-placeholder">🌽</div>
+          <div class="comp-info">
+            <span class="comp-name">Milho</span>
+            <span class="comp-price">+R$ 1,00</span>
+          </div>
+          <span class="comp-check">✓</span>
+        </div>
+
+        <div class="comp-item disabled" data-name="Ervilha" data-price="1.00" onclick="toggleComp(this)">
+          <!-- 🖼️ <img src="imagens/ervilha.jpg" class="comp-img" /> -->
+          <div class="comp-img-placeholder">🟢</div>
+          <div class="comp-info">
+            <span class="comp-name">Ervilha</span>
+            <span class="comp-price">+R$ 1,00</span>
+          </div>
+          <span class="comp-check">✓</span>
+        </div>
+
+        <div class="comp-item disabled" data-name="Queijo ralado" data-price="1.00" onclick="toggleComp(this)">
+          <!-- 🖼️ <img src="imagens/queijo.jpg" class="comp-img" /> -->
+          <div class="comp-img-placeholder">🧀</div>
+          <div class="comp-info">
+            <span class="comp-name">Queijo ralado</span>
+            <span class="comp-price">+R$ 1,00</span>
+          </div>
+          <span class="comp-check">✓</span>
+        </div>
+
+        <div class="comp-item disabled" data-name="Molho extra" data-price="1.00" onclick="toggleComp(this)">
+          <!-- 🖼️ <img src="imagens/molho.jpg" class="comp-img" /> -->
+          <div class="comp-img-placeholder">🥫</div>
+          <div class="comp-info">
+            <span class="comp-name">Molho extra</span>
+            <span class="comp-price">+R$ 1,00</span>
+          </div>
+          <span class="comp-check">✓</span>
+        </div>
+
+        <div class="comp-item disabled" data-name="Purê" data-price="2.50" onclick="toggleComp(this)">
+          <!-- 🖼️ <img src="imagens/pure.jpg" class="comp-img" /> -->
+          <div class="comp-img-placeholder">🥣</div>
+          <div class="comp-info">
+            <span class="comp-name">Purê</span>
+            <span class="comp-price">+R$ 2,50</span>
+          </div>
+          <span class="comp-check">✓</span>
+        </div>
+
+        <div class="comp-item disabled" data-name="Salsicha extra" data-price="2.50" onclick="toggleComp(this)">
+          <!-- 🖼️ <img src="imagens/salsicha.jpg" class="comp-img" /> -->
+          <div class="comp-img-placeholder">🌭</div>
+          <div class="comp-info">
+            <span class="comp-name">Salsicha extra</span>
+            <span class="comp-price">+R$ 2,50</span>
+          </div>
+          <span class="comp-check">✓</span>
+        </div>
+
+      </div>
+
+      <hr class="divider" />
+
+      <!-- SUCO -->
+      <div class="section-label">Sabor do suco <span class="label-tag">incluso</span></div>
+      <div class="juice-grid">
+
+        <div class="juice-item" data-juice="Laranja" onclick="selectJuice(this)">
+          <!-- 🖼️ <img src="imagens/suco-laranja.jpg" class="juice-img" /> -->
+          <div class="juice-img-placeholder">🍊</div>
+          <div class="juice-name">Laranja</div>
+        </div>
+
+        <div class="juice-item" data-juice="Morango" onclick="selectJuice(this)">
+          <!-- 🖼️ <img src="imagens/suco-morango.jpg" class="juice-img" /> -->
+          <div class="juice-img-placeholder">🍓</div>
+          <div class="juice-name">Morango</div>
+        </div>
+
+        <div class="juice-item" data-juice="Abacaxi" onclick="selectJuice(this)">
+          <!-- 🖼️ <img src="imagens/suco-abacaxi.jpg" class="juice-img" /> -->
+          <div class="juice-img-placeholder">🍍</div>
+          <div class="juice-name">Abacaxi</div>
+        </div>
+
+      </div>
+
+      <hr class="divider" />
+
+      <!-- PAGAMENTO -->
+      <div class="section-label">Forma de pagamento</div>
+      <div class="pay-grid">
+        <div class="pay-card" id="pay-pix" onclick="selectPayment('pix')">
+          <span class="pay-icon">📱</span>
+          <div>
+            <div class="pay-label">Pix</div>
+            <div class="pay-desc">Pague pelo QR code</div>
+          </div>
+        </div>
+        <div class="pay-card" id="pay-dinheiro" onclick="selectPayment('dinheiro')">
+          <span class="pay-icon">💵</span>
+          <div>
+            <div class="pay-label">Dinheiro</div>
+            <div class="pay-desc">Pague Pessoalmente</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESUMO -->
+      <div class="summary-box">
+        <div id="summary-lines"></div>
+        <div class="sum-total">
+          <span>Total</span>
+          <span id="summary-total">R$ 0,00</span>
+        </div>
+      </div>
+
+      <div class="error-box" id="order-error-box"></div>
+      <button class="btn-primary" onclick="submitOrder()">Confirmar pedido →</button>
+      <div style="height:2rem;"></div>
+    </div>
+
+    <!-- TELA 3: SUCESSO -->
+    <div id="screen-success" class="success-wrap" style="display:none;">
+      <div class="success-icon">✅</div>
+      <div class="success-title" id="suc-title">Pedido registrado!</div>
+      <div class="success-sub" id="suc-sub"></div>
+
+      <div class="info-box" id="pix-info" style="display:none;">
+        <div class="info-label">Chave Pix</div>
+        <div class="info-val">SUA-CHAVE-PIX-AQUI</div>
+        <div class="info-label" style="margin-top:12px;">Valor a pagar</div>
+        <div class="info-total" id="pix-total"></div>
+        <div class="info-note">Após o pagamento, aguarde a confirmação do vendedor antes de retirar.</div>
+      </div>
+
+      <div class="info-box" id="din-info" style="display:none;">
+        <div class="info-label">Valor a pagar na retirada</div>
+        <div class="info-total" id="din-total"></div>
+        <div class="info-note">Pague ao retirar o lanche. Tenha o valor exato se possível.</div>
+      </div>
+
+      <button class="btn-secondary" onclick="voltarInicio()">Voltar ao início</button>
+    </div>
+
+  </div><!-- /view-client -->
+
+  <!-- ══════════════ VIEW: ADMIN ══════════════ -->
+  <div class="view" id="view-admin">
+    <div class="admin-wrap">
+
+      <div class="admin-header">
+        <div class="admin-title">Painel de pedidos</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-secondary" onclick="refreshAdmin()">↺ Atualizar</button>
+        </div>
+      </div>
+
+      <div class="stats-grid" id="stats-grid"></div>
+
+      <div class="turmas-section">
+        <div class="section-label" style="margin-bottom:10px;">Pedidos por turma</div>
+        <div class="turmas-grid" id="turmas-grid"></div>
+      </div>
+
+      <div class="filter-row">
+        <button class="filter-btn active" onclick="filterOrders('todos', this)">Todos</button>
+        <button class="filter-btn" onclick="filterOrders('aguardando_pix', this)">⏳ Aguardando Pix</button>
+        <button class="filter-btn" onclick="filterOrders('pendente_dinheiro', this)">💵 Dinheiro</button>
+        <button class="filter-btn" onclick="filterOrders('pago', this)">✅ Pagos</button>
+        <button class="filter-btn" onclick="filterOrders('ocultos', this)">👁 Ocultos</button>
+      </div>
+
+      <div class="order-list" id="order-list"></div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+
+</html>
