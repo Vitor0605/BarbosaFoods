@@ -1,11 +1,17 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDocs, collection, query, onSnapshot, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import {
+  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
+  onSnapshot, query, orderBy, writeBatch, getDocs
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 /* ═══════════════════════════════════════════════════════
-   BARBOSA DOG — app.js
-   ═══════════════════════════════════════════════════════ */
+   BARBOSAFOODS — app.js
+═══════════════════════════════════════════════════════ */
 
+/* ── Firebase ── */
 const firebaseConfig = {
   apiKey: "AIzaSyD9m9ULOrqYswGlT0xwiUylgFTbZDwvMvw",
   authDomain: "barbosafoods-5bb86.firebaseapp.com",
@@ -16,69 +22,85 @@ const firebaseConfig = {
   measurementId: "G-VZRE9CSQS4"
 };
 
-// Inicializa o Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+const firebaseApp  = initializeApp(firebaseConfig);
+const auth         = getAuth(firebaseApp);
+const db           = getFirestore(firebaseApp);
+const pedidosRef   = collection(db, "pedidos");
 
-/* ══════════════════════════════════════
-   TURMAS
-   → Adicione ou remova turmas aqui.
-   ══════════════════════════════════════ */
-const TURMAS = [
-  '1°EM', '1°DS', '1°FD',
-  '2°EM', '2°DS', '2°FD',
-  '3°A EM', '3°B EM', '3°DS', '3°FD'
+/* ── E-mails com acesso ao admin ─────────────────────────
+   Adicione aqui os e-mails que podem ver o painel admin.
+   Qualquer outro e-mail autenticado vai para a tela de pedido.
+────────────────────────────────────────────────────────── */
+const ADMIN_EMAILS = [
+  "seu-email-admin@gmail.com"   // ← troque pelo seu e-mail real
 ];
 
 /* ══════════════════════════════════════
-   CONSTANTES E ESTADO
-   ══════════════════════════════════════ */
-const BREAD_PRICES = { medio: 10, grande: 15 };
+   TURMAS — agrupadas por curso
+══════════════════════════════════════ */
+const TURMAS_GRUPOS = [
+  {
+    grupo: 'Ensino Médio',
+    turmas: ['1°EM', '2°A EM', '2°B EM', '2°C EM', '3°A EM', '3°B EM']
+  },
+  {
+    grupo: 'Desenvolvimento de Sistemas',
+    turmas: ['1°DS', '2°DS', '3°DS']
+  },
+  {
+    grupo: 'Finanças / Administração',
+    turmas: ['1°FD', '2°FD', '3°FD']
+  },
+  {
+    grupo: 'Estética',
+    turmas: ['1°EST', '2°EST', '3°EST']
+  }
+];
+
+/* ══════════════════════════════════════
+   ESTADO
+══════════════════════════════════════ */
+const BREAD_PRICES    = { medio: 10, grande: 15 };
 const MAX_COMPS_MEDIO = 3;
 
-let selectedTurma = null;
-let selectedBread = null;
+let selectedTurma   = null;
+let selectedBread   = null;
 let selectedPayment = null;
-let selectedJuice = null;
-let currentFilter = 'todos';
-let allOrders = []; // Pedidos locais atualizados em tempo real pelo Firestore
-let unsubscribeOrders = null;
+let selectedJuice   = null;
+let currentFilter   = 'todos';
+let allOrders       = [];
+let currentUser     = null;
+let isAdmin         = false;
+let unsubOrders     = null;
 
 /* ══════════════════════════════════════
    UTILITÁRIOS
-   ══════════════════════════════════════ */
-function getOrders() {
-  return allOrders;
-}
-
+══════════════════════════════════════ */
 function fmtBRL(v) {
-  return 'R$ ' + v.toFixed(2).replace('.', ',');
+  return 'R$ ' + Number(v).toFixed(2).replace('.', ',');
 }
 
 function fmtDate(iso) {
   if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric'
+  });
 }
 
 function getSelectedComps() {
   return Array.from(document.querySelectorAll('.comp-item.selected'));
 }
 
-/* Pedidos de um aluno (por nome + turma, ignorando ocultos na lógica de bloqueio) */
 function pedidosDoAluno(nome, turma) {
-  return getOrders().filter(o =>
-    o.name.trim().toLowerCase() === nome.trim().toLowerCase() &&
+  return allOrders.filter(o =>
+    o.name && o.name.trim().toLowerCase() === nome.trim().toLowerCase() &&
     o.turma === turma
   );
 }
 
-/* Regra: pode fazer novo pedido se não tiver nenhum pedido ATIVO não pago */
 function statusAluno(nome, turma) {
-  const pedidos = pedidosDoAluno(nome, turma);
+  const pedidos   = pedidosDoAluno(nome, turma);
   const nao_pagos = pedidos.filter(o => o.status !== 'pago');
-
   if (nao_pagos.length > 0) {
     const p = nao_pagos[0];
     return {
@@ -87,8 +109,54 @@ function statusAluno(nome, turma) {
       pedidos
     };
   }
-
   return { podePedir: true, motivo: '', pedidos };
+}
+
+/* ══════════════════════════════════════
+   ROTEAMENTO POR URL
+   /admin  → painel admin (só para ADMIN_EMAILS)
+   /       → tela de pedido
+══════════════════════════════════════ */
+function isAdminRoute() {
+  return window.location.pathname.endsWith('/admin') ||
+         window.location.pathname.endsWith('/admin.html');
+}
+
+function routeUser(user) {
+  if (!user) {
+    showOnlyView('view-login');
+    return;
+  }
+
+  const email = (user.email || '').toLowerCase();
+  isAdmin = ADMIN_EMAILS.map(e => e.toLowerCase()).includes(email);
+
+  if (isAdminRoute()) {
+    if (isAdmin) {
+      showOnlyView('view-admin');
+      subscribeToOrders();
+    } else {
+      // Não é admin — manda para a tela de pedido
+      window.history.replaceState({}, '', '/');
+      showOnlyView('view-client');
+      subscribeToOrders();
+    }
+  } else {
+    showOnlyView('view-client');
+    subscribeToOrders();
+  }
+}
+
+function showOnlyView(id) {
+  document.querySelectorAll('.view').forEach(el => {
+    el.classList.remove('active');
+    el.style.display = 'none';
+  });
+  const target = document.getElementById(id);
+  if (target) {
+    target.classList.add('active');
+    target.style.display = '';
+  }
 }
 
 /* ══════════════════════════════════════
@@ -99,67 +167,60 @@ function toggleTheme() {
   const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   html.setAttribute('data-theme', next);
   document.getElementById('theme-icon').textContent = next === 'dark' ? '☀️' : '🌙';
-  localStorage.setItem('barbosa_dog_theme', next);
+  localStorage.setItem('bf_theme', next);
 }
 
 function loadTheme() {
-  const saved = localStorage.getItem('barbosa_dog_theme') || 'dark';
+  const saved = localStorage.getItem('bf_theme') || 'dark';
   document.documentElement.setAttribute('data-theme', saved);
   document.getElementById('theme-icon').textContent = saved === 'dark' ? '☀️' : '🌙';
 }
 
 /* ══════════════════════════════════════
-   NAVEGAÇÃO
-══════════════════════════════════════ */
-function showView(viewId, btn) {
-  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('view-' + viewId).classList.add('active');
-  if (btn) btn.classList.add('active');
-  if (viewId === 'admin') refreshAdmin();
-}
-
-/* ══════════════════════════════════════
-   IDENTIFICAÇÃO
+   IDENTIFICAÇÃO — turmas agrupadas
 ══════════════════════════════════════ */
 function initIdentificacao() {
-  const el = document.getElementById('turma-chips');
-  el.innerHTML = TURMAS.map(t =>
-    `<div class="turma-chip" onclick="selecionarTurma('${t}', this)">${t}</div>`
-  ).join('');
+  const wrap = document.getElementById('turma-chips-wrap');
+  wrap.innerHTML = TURMAS_GRUPOS.map(g => `
+    <div class="turma-grupo">
+      <div class="turma-grupo-label">${g.grupo}</div>
+      <div class="turma-chips">
+        ${g.turmas.map(t =>
+          `<div class="turma-chip" data-turma="${t}" onclick="selecionarTurma('${t}', this)">${t}</div>`
+        ).join('')}
+      </div>
+    </div>
+  `).join('');
 }
 
 function selecionarTurma(nome, el) {
   selectedTurma = nome;
-
   document.querySelectorAll('.turma-chip').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
 
-  // Mantém o nome se já estiver preenchido, ou preenche com o do Google se logado
   const nameInput = document.getElementById('customer-name');
-  if (!nameInput.value.trim() && auth.currentUser) {
-    nameInput.value = auth.currentUser.displayName || '';
+  if (!nameInput.value.trim() && currentUser) {
+    nameInput.value = currentUser.displayName || '';
   }
 
   document.getElementById('student-status-box').innerHTML = '';
-  document.getElementById('btn-continuar').style.display = 'none';
-  document.getElementById('id-error-box').style.display = 'none';
-  document.getElementById('nome-section').style.display = 'block';
-  
-  // Executa validação imediatamente para exibir o botão se válido
+  document.getElementById('btn-continuar').style.display  = 'none';
+  document.getElementById('id-error-box').style.display   = 'none';
+  document.getElementById('nome-section').style.display   = 'block';
+
   onNomeInput();
   nameInput.focus();
 }
 
 function onNomeInput() {
-  const nome = document.getElementById('customer-name').value.trim();
+  const nome     = document.getElementById('customer-name').value.trim();
   const statusEl = document.getElementById('student-status-box');
-  const btnEl = document.getElementById('btn-continuar');
+  const btnEl    = document.getElementById('btn-continuar');
 
   document.getElementById('id-error-box').style.display = 'none';
 
   if (!selectedTurma || nome.length < 3) {
-    statusEl.innerHTML = '';
+    statusEl.innerHTML  = '';
     btnEl.style.display = 'none';
     return;
   }
@@ -167,33 +228,29 @@ function onNomeInput() {
   const st = statusAluno(nome, selectedTurma);
 
   if (!st.podePedir) {
-    statusEl.innerHTML = `<div class="student-status-card bloqueado">🔒 ${st.motivo}</div>`;
+    statusEl.innerHTML  = `<div class="student-status-card bloqueado">🔒 ${st.motivo}</div>`;
     btnEl.style.display = 'none';
   } else if (st.pedidos.length > 0) {
-    const count = st.pedidos.length;
-    statusEl.innerHTML = `<div class="student-status-card ok">✅ ${count} pedido${count > 1 ? 's' : ''} anterior${count > 1 ? 'es' : ''} pago${count > 1 ? 's' : ''}. Pode fazer mais um!</div>`;
+    const c = st.pedidos.length;
+    statusEl.innerHTML  = `<div class="student-status-card ok">✅ ${c} pedido${c > 1 ? 's' : ''} anterior${c > 1 ? 'es' : ''} pago${c > 1 ? 's' : ''}. Pode fazer mais um!</div>`;
     btnEl.style.display = 'block';
   } else {
-    statusEl.innerHTML = '';
+    statusEl.innerHTML  = '';
     btnEl.style.display = 'block';
   }
 }
 
 function continuar() {
   const nome = document.getElementById('customer-name').value.trim();
-
-  if (!selectedTurma) { showIdError('Selecione sua turma primeiro.'); return; }
+  if (!selectedTurma)  { showIdError('Selecione sua turma primeiro.'); return; }
   if (nome.length < 3) { showIdError('Digite seu nome completo.'); return; }
 
   const st = statusAluno(nome, selectedTurma);
-  if (!st.podePedir) { showIdError(st.motivo); return; }
+  if (!st.podePedir)   { showIdError(st.motivo); return; }
 
-  // Vai para tela de pedido
   document.getElementById('screen-identify').style.display = 'none';
-  document.getElementById('screen-order').style.display = 'block';
-
-  document.getElementById('pill-name').textContent =
-    `🧑 ${nome}  ·  ${selectedTurma}`;
+  document.getElementById('screen-order').style.display    = 'block';
+  document.getElementById('pill-name').textContent         = `🧑 ${nome}  ·  ${selectedTurma}`;
 
   resetOrderForm();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -201,12 +258,12 @@ function continuar() {
 
 function showIdError(msg) {
   const el = document.getElementById('id-error-box');
-  el.textContent = msg;
+  el.textContent   = msg;
   el.style.display = 'block';
 }
 
 function voltarIdentificacao() {
-  document.getElementById('screen-order').style.display = 'none';
+  document.getElementById('screen-order').style.display    = 'none';
   document.getElementById('screen-identify').style.display = 'block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -247,7 +304,7 @@ function enforceLimit() {
 }
 
 /* ══════════════════════════════════════
-   SUCO
+   BEBIDA
 ══════════════════════════════════════ */
 function selectJuice(el) {
   document.querySelectorAll('.juice-item').forEach(j => j.classList.remove('selected'));
@@ -280,227 +337,227 @@ function updateSummary() {
   getSelectedComps().forEach(el => {
     html += `<div class="sum-row"><span>${el.dataset.name}</span><span>+${fmtBRL(parseFloat(el.dataset.price))}</span></div>`;
   });
-  if (selectedJuice) html += `<div class="sum-row"><span>Suco de ${selectedJuice}</span><span>incluso</span></div>`;
-  document.getElementById('summary-lines').innerHTML = html;
+  if (selectedJuice) html += `<div class="sum-row"><span>${selectedJuice}</span><span>incluso</span></div>`;
+  document.getElementById('summary-lines').innerHTML   = html;
   document.getElementById('summary-total').textContent = fmtBRL(calcTotal());
 }
 
 /* ══════════════════════════════════════
-   ENVIO DO PEDIDO
+   ENVIO DO PEDIDO → FIRESTORE
+   FIX: só mostra sucesso APÓS confirmação do Firestore
 ══════════════════════════════════════ */
 function showOrderError(msg) {
   const el = document.getElementById('order-error-box');
-  el.textContent = msg;
+  el.textContent   = msg;
   el.style.display = 'block';
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-function submitOrder() {
+async function submitOrder() {
   document.getElementById('order-error-box').style.display = 'none';
 
-  const nome = document.getElementById('customer-name').value.trim();
+  const nome  = document.getElementById('customer-name').value.trim();
   const turma = selectedTurma;
 
-  // Proteção dupla: re-verifica bloqueio
   const st = statusAluno(nome, turma);
-  if (!st.podePedir) { showOrderError(st.motivo); return; }
-
-  if (!selectedBread) { showOrderError('Selecione o tamanho do pão.'); return; }
-  if (!selectedJuice) { showOrderError('Escolha o sabor do suco.'); return; }
+  if (!st.podePedir)    { showOrderError(st.motivo); return; }
+  if (!selectedBread)   { showOrderError('Selecione o tamanho do pão.'); return; }
+  if (!selectedJuice)   { showOrderError('Escolha sua bebida.'); return; }
   if (!selectedPayment) { showOrderError('Selecione a forma de pagamento.'); return; }
 
-  const total = calcTotal();
+  const btn = document.getElementById('btn-submit-order');
+  btn.disabled    = true;
+  btn.textContent = 'Salvando...';
+
+  const now   = new Date();
   const comps = getSelectedComps().map(el => el.dataset.name);
-  const now = new Date();
+  const total = calcTotal();
 
   const order = {
-    id: Date.now(),
-    name: nome,
+    name:        nome,
     turma,
-    bread: selectedBread,
+    bread:       selectedBread,
     complements: comps,
-    juice: selectedJuice,
-    payment: selectedPayment,
+    juice:       selectedJuice,
+    payment:     selectedPayment,
     total,
-    status: selectedPayment === 'pix' ? 'aguardando_pix' : 'pendente_dinheiro',
-    oculto: false,
-    timestamp: now.toISOString(),
-    timeStr: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    dateStr: fmtDate(now.toISOString())
+    status:      selectedPayment === 'pix' ? 'aguardando_pix' : 'pendente_dinheiro',
+    oculto:      false,
+    timestamp:   now.toISOString(),
+    timeStr:     now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    dateStr:     fmtDate(now.toISOString()),
+    userUid:     currentUser ? currentUser.uid : null
+    // SEGURANÇA: e-mail NÃO é salvo pelo cliente — use Firestore Rules ou Cloud Functions
+    // para validar userUid server-side se precisar de mais segurança.
   };
 
-  // Adiciona informações do usuário autenticado no pedido
-  if (auth.currentUser) {
-    order.userUid = auth.currentUser.uid;
-    order.userEmail = auth.currentUser.email;
+  try {
+    await addDoc(pedidosRef, order); // Aguarda confirmação real do Firestore
+
+    // Só aqui mostramos sucesso
+    document.getElementById('screen-order').style.display   = 'none';
+    document.getElementById('screen-success').style.display = 'block';
+
+    const compText = comps.length ? comps.join(', ') : 'sem complementos extras';
+    document.getElementById('suc-title').textContent = `Pedido de ${nome} registrado! 🎉`;
+    document.getElementById('suc-sub').textContent   =
+      `Turma ${turma} · Pão ${selectedBread} · ${compText} · ${selectedJuice}`;
+
+    document.getElementById('pix-info').style.display = 'none';
+    document.getElementById('din-info').style.display  = 'none';
+    if (selectedPayment === 'pix') {
+      document.getElementById('pix-info').style.display = 'block';
+      document.getElementById('pix-total').textContent  = fmtBRL(total);
+    } else {
+      document.getElementById('din-info').style.display = 'block';
+      document.getElementById('din-total').textContent  = fmtBRL(total);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    console.error('Erro ao salvar pedido:', err);
+    showOrderError('Erro ao salvar o pedido. Verifique sua conexão e tente novamente.');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Confirmar pedido →';
   }
-
-  // Salva no Firestore
-  setDoc(doc(db, "pedidos", String(order.id)), order)
-    .catch(err => {
-      console.error("Erro ao salvar pedido:", err);
-      showOrderError("Erro ao salvar o pedido no banco de dados. Tente novamente.");
-    });
-
-  // Sucesso
-  document.getElementById('screen-order').style.display = 'none';
-  document.getElementById('screen-success').style.display = 'block';
-
-  const compText = comps.length ? comps.join(', ') : 'sem complementos extras';
-  document.getElementById('suc-title').textContent = `Pedido de ${nome} registrado! 🎉`;
-  document.getElementById('suc-sub').textContent = `Turma ${turma} · Pão ${selectedBread} · ${compText} · Suco de ${selectedJuice}`;
-
-  document.getElementById('pix-info').style.display = 'none';
-  document.getElementById('din-info').style.display = 'none';
-
-  if (selectedPayment === 'pix') {
-    document.getElementById('pix-info').style.display = 'block';
-    document.getElementById('pix-total').textContent = fmtBRL(total);
-  } else {
-    document.getElementById('din-info').style.display = 'block';
-    document.getElementById('din-total').textContent = fmtBRL(total);
-  }
-
-  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /* ══════════════════════════════════════
-   RESET FORMULÁRIO DE PEDIDO
+   RESET
 ══════════════════════════════════════ */
 function resetOrderForm() {
-  selectedBread = null;
+  selectedBread   = null;
   selectedPayment = null;
-  selectedJuice = null;
-
+  selectedJuice   = null;
   document.querySelectorAll('.bread-card, .comp-item, .juice-item, .pay-card')
     .forEach(el => el.classList.remove('selected'));
   document.querySelectorAll('.comp-item')
     .forEach(el => el.classList.add('disabled'));
-
-  document.getElementById('limit-warn').style.display = 'none';
+  document.getElementById('limit-warn').style.display      = 'none';
   document.getElementById('order-error-box').style.display = 'none';
   updateSummary();
 }
 
 function voltarInicio() {
-  document.getElementById('screen-success').style.display = 'none';
+  document.getElementById('screen-success').style.display  = 'none';
   document.getElementById('screen-identify').style.display = 'block';
-  document.getElementById('screen-order').style.display = 'none';
-
-  // Reseta identificação
+  document.getElementById('screen-order').style.display    = 'none';
   selectedTurma = null;
   document.querySelectorAll('.turma-chip').forEach(c => c.classList.remove('selected'));
-  document.getElementById('customer-name').value = '';
-  document.getElementById('nome-section').style.display = 'none';
+  document.getElementById('customer-name').value          = '';
+  document.getElementById('nome-section').style.display   = 'none';
   document.getElementById('student-status-box').innerHTML = '';
-  document.getElementById('btn-continuar').style.display = 'none';
-  document.getElementById('id-error-box').style.display = 'none';
-
+  document.getElementById('btn-continuar').style.display  = 'none';
+  document.getElementById('id-error-box').style.display   = 'none';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /* ══════════════════════════════════════
-   ADMIN — STATS
+   LISTENER EM TEMPO REAL
 ══════════════════════════════════════ */
-function refreshAdmin() {
-  const orders = getOrders();
-  const visiveis = orders.filter(o => !o.oculto);
+function subscribeToOrders() {
+  if (unsubOrders) return; // já inscrito
 
-  const pago = visiveis.filter(o => o.status === 'pago').length;
+  const q = query(pedidosRef, orderBy('timestamp', 'desc'));
+  unsubOrders = onSnapshot(q, snapshot => {
+    allOrders = snapshot.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+
+    // Atualiza admin só se estiver na view-admin
+    if (document.getElementById('view-admin').classList.contains('active')) {
+      renderAdmin();
+    }
+
+    // Atualiza status do formulário de identificação se estiver preenchido
+    const nameInput = document.getElementById('customer-name');
+    if (nameInput && nameInput.value.trim().length >= 3 && selectedTurma) {
+      onNomeInput();
+    }
+  }, err => console.error('onSnapshot error:', err));
+}
+
+/* ══════════════════════════════════════
+   ADMIN — renderiza
+══════════════════════════════════════ */
+function refreshAdmin() { renderAdmin(); }
+
+function renderAdmin() {
+  const visiveis   = allOrders.filter(o => !o.oculto);
+  const pago       = visiveis.filter(o => o.status === 'pago').length;
   const aguardando = visiveis.filter(o => o.status === 'aguardando_pix').length;
-  const pendente = visiveis.filter(o => o.status === 'pendente_dinheiro').length;
-  const ocultos = orders.filter(o => o.oculto).length;
-  const arrecadado = orders.filter(o => o.status === 'pago').reduce((s, o) => s + o.total, 0);
-  const aReceber = orders.filter(o => o.status !== 'pago' && !o.oculto).reduce((s, o) => s + o.total, 0);
+  const pendente   = visiveis.filter(o => o.status === 'pendente_dinheiro').length;
+  const ocultos    = allOrders.filter(o => o.oculto).length;
+  const arrecadado = allOrders.filter(o => o.status === 'pago').reduce((s, o) => s + o.total, 0);
+  const aReceber   = allOrders.filter(o => o.status !== 'pago' && !o.oculto).reduce((s, o) => s + o.total, 0);
 
   document.getElementById('stats-grid').innerHTML = `
-    <div class="stat-card"><div class="stat-label">Total de pedidos</div><div class="stat-val orange">${orders.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Total de pedidos</div><div class="stat-val orange">${allOrders.length}</div></div>
     <div class="stat-card"><div class="stat-label">✅ Pagos</div><div class="stat-val green">${pago}</div></div>
     <div class="stat-card"><div class="stat-label">⏳ Aguardando Pix</div><div class="stat-val blue">${aguardando}</div></div>
-    <div class="stat-card"><div class="stat-label">💵 Dinheiro (retirada)</div><div class="stat-val amber">${pendente}</div></div>
+    <div class="stat-card"><div class="stat-label">💵 Dinheiro</div><div class="stat-val amber">${pendente}</div></div>
     <div class="stat-card"><div class="stat-label">👁 Ocultos</div><div class="stat-val" style="color:var(--text-secondary)">${ocultos}</div></div>
     <div class="stat-card"><div class="stat-label">💰 Arrecadado</div><div class="stat-val green">${fmtBRL(arrecadado)}</div></div>
     <div class="stat-card"><div class="stat-label">⏳ A receber</div><div class="stat-val yellow">${fmtBRL(aReceber)}</div></div>
   `;
 
-  // Turmas (só pedidos visíveis)
   const turmaCounts = {};
   visiveis.forEach(o => {
     const t = o.turma || 'Sem turma';
     turmaCounts[t] = (turmaCounts[t] || 0) + 1;
   });
-
   const turmasHtml = Object.entries(turmaCounts)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([t, c]) => `<div class="turma-badge">${t}<span>${c} pedido${c !== 1 ? 's' : ''}</span></div>`)
     .join('');
-
   document.getElementById('turmas-grid').innerHTML =
     turmasHtml || '<span style="color:var(--text-secondary);font-size:13px;">Nenhum pedido ainda.</span>';
 
-  renderOrders(orders);
+  renderOrders();
 }
 
-/* ══════════════════════════════════════
-   ADMIN — FILTROS E LISTA
-══════════════════════════════════════ */
 function filterOrders(status, btn) {
   currentFilter = status;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  renderOrders(getOrders());
+  renderOrders();
 }
 
-function renderOrders(orders) {
+function renderOrders() {
   let filtered;
-
-  if (currentFilter === 'todos') {
-    filtered = orders.filter(o => !o.oculto);
-  } else if (currentFilter === 'ocultos') {
-    filtered = orders.filter(o => o.oculto);
-  } else {
-    filtered = orders.filter(o => o.status === currentFilter && !o.oculto);
-  }
+  if (currentFilter === 'todos')   filtered = allOrders.filter(o => !o.oculto);
+  else if (currentFilter === 'ocultos') filtered = allOrders.filter(o => o.oculto);
+  else filtered = allOrders.filter(o => o.status === currentFilter && !o.oculto);
 
   const list = document.getElementById('order-list');
+  if (!filtered.length) { list.innerHTML = '<div class="empty-state">Nenhum pedido aqui ainda.</div>'; return; }
 
-  if (!filtered.length) {
-    list.innerHTML = '<div class="empty-state">Nenhum pedido aqui ainda.</div>';
-    return;
-  }
-
-  // Pedidos visíveis/ativos primeiro (mais recentes), ocultos sempre no fim
-  const sorted = [...filtered].sort((a, b) => b.id - a.id);
+  const sorted = [...filtered].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   list.innerHTML = sorted.map(o => {
-    const isOculto = o.oculto;
+    const fid         = o.firestoreId;
+    const isOculto    = o.oculto;
     const statusClass = isOculto ? 'oculto'
       : o.status === 'pago' ? 'pago'
-        : o.status === 'aguardando_pix' ? 'aguardando'
-          : 'pendente';
+      : o.status === 'aguardando_pix' ? 'aguardando' : 'pendente';
 
     const badge = isOculto
       ? '<span class="badge badge-oculto">👁 Oculto</span>'
       : o.status === 'pago'
-        ? '<span class="badge badge-pago">✅ Pago</span>'
-        : o.status === 'aguardando_pix'
-          ? '<span class="badge badge-aguardando">⏳ Aguardando Pix</span>'
-          : '<span class="badge badge-pendente">💵 Pagar na retirada</span>';
+      ? '<span class="badge badge-pago">✅ Pago</span>'
+      : o.status === 'aguardando_pix'
+      ? '<span class="badge badge-aguardando">⏳ Aguardando Pix</span>'
+      : '<span class="badge badge-pendente">💵 Pagar na retirada</span>';
 
     const confirmBtn = (!isOculto && o.status !== 'pago')
-      ? `<button class="btn-confirm" onclick="confirmPayment(${o.id})">✓ Pago</button>`
-      : '';
-
+      ? `<button class="btn-confirm" onclick="confirmPayment('${fid}')">✓ Pago</button>` : '';
     const ocultarBtn = !isOculto
-      ? `<button class="btn-action btn-hide" onclick="toggleOculto(${o.id})" title="Ocultar pedido">👁 Ocultar</button>`
-      : `<button class="btn-action btn-show" onclick="toggleOculto(${o.id})" title="Mostrar pedido">↩ Mostrar</button>`;
+      ? `<button class="btn-action btn-hide" onclick="toggleOculto('${fid}')">👁 Ocultar</button>`
+      : `<button class="btn-action btn-show" onclick="toggleOculto('${fid}')">↩ Mostrar</button>`;
+    const removerBtn = `<button class="btn-action btn-remove" onclick="removeOrder('${fid}')">✕ Remover</button>`;
 
-    const compText = o.complements && o.complements.length
-      ? o.complements.join(', ')
-      : 'sem complementos extras';
+    const compText = o.complements && o.complements.length ? o.complements.join(', ') : 'sem complementos extras';
 
     return `
-      <div class="order-card ${statusClass}" id="order-${o.id}">
+      <div class="order-card ${statusClass}" id="order-${fid}">
         <div class="order-header">
           <div>
             <div class="order-name">${o.name}</div>
@@ -510,164 +567,94 @@ function renderOrders(orders) {
               <span class="order-time">🕐 ${o.timeStr || ''}</span>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            ${badge}
-          </div>
+          <div>${badge}</div>
         </div>
         <div class="order-detail">
           Pão ${o.bread} · ${compText}<br>
-          Suco de ${o.juice} · Pagamento: ${o.payment === 'pix' ? 'Pix' : 'Dinheiro'}
+          ${o.juice} · Pagamento: ${o.payment === 'pix' ? 'Pix' : 'Dinheiro'}
         </div>
         <div class="order-footer">
           <div class="order-total">${fmtBRL(o.total)}</div>
-          <div class="order-actions">
-            ${confirmBtn}
-            ${ocultarBtn}
-          </div>
+          <div class="order-actions">${confirmBtn}${ocultarBtn}${removerBtn}</div>
         </div>
       </div>`;
   }).join('');
 }
 
 /* ══════════════════════════════════════
-   ADMIN — AÇÕES
+   ADMIN — AÇÕES FIREBASE
+   FIX: usa firestoreId real do documento
 ══════════════════════════════════════ */
-function confirmPayment(id) {
-  updateDoc(doc(db, "pedidos", String(id)), { status: 'pago' })
-    .catch(err => console.error("Erro ao confirmar pagamento:", err));
+async function confirmPayment(fid) {
+  try { await updateDoc(doc(db, 'pedidos', fid), { status: 'pago' }); }
+  catch (e) { alert('Erro ao confirmar: ' + e.message); }
 }
 
-function toggleOculto(id) {
-  const orders = getOrders();
-  const order = orders.find(o => o.id === id);
-  if (!order) return;
-  updateDoc(doc(db, "pedidos", String(id)), { oculto: !order.oculto })
-    .catch(err => console.error("Erro ao alternar visibilidade:", err));
+async function toggleOculto(fid) {
+  const o = allOrders.find(x => x.firestoreId === fid);
+  if (!o) return;
+  try { await updateDoc(doc(db, 'pedidos', fid), { oculto: !o.oculto }); }
+  catch (e) { alert('Erro ao ocultar: ' + e.message); }
 }
 
-// Operações de exclusão removidas por segurança (deletar somente via painel do Firebase)
+async function removeOrder(fid) {
+  if (!confirm('Remover este pedido permanentemente?')) return;
+  try { await deleteDoc(doc(db, 'pedidos', fid)); }
+  catch (e) { alert('Erro ao remover: ' + e.message); }
+}
+
+async function adminClearAll() {
+  if (!confirm('Apagar TODOS os pedidos? Essa ação não pode ser desfeita.')) return;
+  try {
+    const snap  = await getDocs(pedidosRef);
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  } catch (e) { alert('Erro ao limpar: ' + e.message); }
+}
 
 /* ══════════════════════════════════════
-   AUTENTICAÇÃO & FIREBASE REALTIME
-   ══════════════════════════════════════ */
+   AUTH
+══════════════════════════════════════ */
 const provider = new GoogleAuthProvider();
 
 function loginWithGoogle() {
-  signInWithPopup(auth, provider)
-    .then(() => {
-      window.location.reload();
-    })
-    .catch((error) => {
-      console.error("Erro no login com Google:", error);
-      alert("Erro ao fazer login com o Google:\n" + error.message + "\nCódigo: " + error.code);
-    });
-}
-
-function logout() {
-  if (confirm("Deseja realmente sair?")) {
-    signOut(auth).catch((error) => {
-      console.error("Erro ao deslogar:", error);
-    });
-  }
-}
-
-function subscribeToOrders() {
-  if (unsubscribeOrders) unsubscribeOrders();
-
-  const q = collection(db, "pedidos");
-  unsubscribeOrders = onSnapshot(q, (snapshot) => {
-    allOrders = [];
-    snapshot.forEach((docSnap) => {
-      allOrders.push(docSnap.data());
-    });
-    
-    // Atualiza o painel admin em tempo real incondicionalmente
-    refreshAdmin();
-    
-    // Também atualiza o status do formulário de identificação em tempo real
-    const nameInput = document.getElementById('customer-name');
-    if (nameInput && nameInput.value.trim() && selectedTurma) {
-      onNomeInput();
-    }
-  }, (error) => {
-    console.error("Erro na escuta dos pedidos do Firestore:", error);
+  signInWithPopup(auth, provider).catch(err => {
+    alert('Erro ao fazer login com o Google:\n' + err.message + '\nCódigo: ' + err.code);
   });
 }
 
-// Configura o observador de autenticação do Firebase
-onAuthStateChanged(auth, (user) => {
-  const navTabs = document.querySelector('.nav-tabs');
-  const userProfile = document.getElementById('user-profile-badge');
-  const viewLogin = document.getElementById('view-login');
-  
+function logout() {
+  if (confirm('Deseja realmente sair?')) signOut(auth);
+}
+
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+
+  const badge = document.getElementById('user-profile-badge');
   if (user) {
-    // Usuário autenticado
-    if (navTabs) navTabs.style.display = 'flex';
-    if (userProfile) {
-      userProfile.style.display = 'flex';
-      const userPhoto = document.getElementById('user-photo');
-      if (userPhoto) userPhoto.src = user.photoURL || 'https://www.gstatic.com/images/branding/product/2x/avatar_anonymous_96x96dp.png';
-    }
-    if (viewLogin) viewLogin.style.display = 'none';
-    
-    // Assinar atualizações de pedidos em tempo real
-    subscribeToOrders();
-    
-    // Preenche o nome do aluno se vazio
-    const nameInput = document.getElementById('customer-name');
-    if (nameInput && !nameInput.value.trim()) {
-      nameInput.value = user.displayName || '';
-    }
-    
-    // Exibe a tela de identificação por padrão
-    showView('client');
+    badge.style.display = 'flex';
+    document.getElementById('user-photo').src =
+      user.photoURL || 'https://www.gstatic.com/images/branding/product/2x/avatar_anonymous_96x96dp.png';
   } else {
-    // Usuário deslogado
-    if (navTabs) navTabs.style.display = 'none';
-    if (userProfile) userProfile.style.display = 'none';
-    
-    // Limpa escuta em tempo real do Firestore
-    if (unsubscribeOrders) {
-      unsubscribeOrders();
-      unsubscribeOrders = null;
-    }
+    badge.style.display = 'none';
+    if (unsubOrders) { unsubOrders(); unsubOrders = null; }
     allOrders = [];
-    
-    // Exibe apenas a tela de login
-    document.querySelectorAll('.view').forEach(el => {
-      if (el.id === 'view-login') {
-        el.classList.add('active');
-        el.style.display = 'flex';
-      } else {
-        el.classList.remove('active');
-        el.style.display = 'none';
-      }
-    });
   }
+
+  routeUser(user);
 });
 
 /* ══════════════════════════════════════
-   EXPOR FUNÇÕES PARA O HTML (MÓDULO ES)
-   ══════════════════════════════════════ */
+   EXPOR PARA HTML (módulo ES)
+══════════════════════════════════════ */
 Object.assign(window, {
-  showView,
-  toggleTheme,
-  selecionarTurma,
-  onNomeInput,
-  continuar,
-  voltarIdentificacao,
-  selectBread,
-  toggleComp,
-  selectJuice,
-  selectPayment,
-  submitOrder,
-  voltarInicio,
-  refreshAdmin,
-  filterOrders,
-  confirmPayment,
-  toggleOculto,
-  loginWithGoogle,
-  logout
+  toggleTheme, loginWithGoogle, logout,
+  selecionarTurma, onNomeInput, continuar, voltarIdentificacao,
+  selectBread, toggleComp, selectJuice, selectPayment,
+  submitOrder, voltarInicio,
+  refreshAdmin, filterOrders,
+  confirmPayment, toggleOculto, removeOrder, adminClearAll
 });
 
 /* ══════════════════════════════════════
