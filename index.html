@@ -61,7 +61,6 @@
       <div id="nome-section" style="display:none;">
         <div class="section-label" style="margin-top:1.25rem;">2. Seu nome completo</div>
         <div class="name-input-wrap">
-          <span class="name-input-icon">🧑</span>
           <input class="name-input-field" type="text" id="customer-name"
             placeholder="Digite seu nome completo..." oninput="onNomeInput()" autocomplete="off" />
         </div>
@@ -209,7 +208,13 @@
       <!-- REFRIGERANTES (+R$5,00 cada, múltipla escolha, máx 3) -->
       <div class="drink-group">
         <div class="drink-group-header">
-          <span class="drink-group-title">🥤 Refrigerante</span>
+          <span class="drink-group-title"><span class="drink-title-icon"><svg class="soda-cup-art" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+                <path class="soda-cup-straw" d="M31 4l7-2 1.4 4.4-5.7 1.7-3 27.9h-4L31 4z"/>
+                <path class="soda-cup-lid" d="M12 13h24l-1.5 5h-21L12 13z"/>
+                <path class="soda-cup-body" d="M15 18h18l-2.2 24H17.2L15 18z"/>
+                <circle class="soda-cup-bubble" cx="23" cy="27" r="2.2"/>
+                <circle class="soda-cup-bubble" cx="28" cy="33" r="1.8"/>
+              </svg></span> Refrigerante</span>
           <span class="drink-group-tag paid-tag">+R$ 5,00 por copo</span>
         </div>
         <div class="drink-group-note">Pode escolher até 3 copos. Pode repetir o mesmo sabor.</div>
@@ -218,12 +223,28 @@
         <div class="soda-flavor-grid">
           <div class="soda-flavor-card" data-soda="Guaraná Zero" onclick="addSoda('Guaraná Zero')">
             <!-- 🖼️ <img src="imagens/guarana.jpg" class="soda-img" /> -->
-            <div class="juice-img-placeholder">🟢</div>
+            <div class="soda-img-placeholder soda-guarana">
+              <svg class="soda-cup-art" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+                <path class="soda-cup-straw" d="M31 4l7-2 1.4 4.4-5.7 1.7-3 27.9h-4L31 4z"/>
+                <path class="soda-cup-lid" d="M12 13h24l-1.5 5h-21L12 13z"/>
+                <path class="soda-cup-body" d="M15 18h18l-2.2 24H17.2L15 18z"/>
+                <circle class="soda-cup-bubble" cx="23" cy="27" r="2.2"/>
+                <circle class="soda-cup-bubble" cx="28" cy="33" r="1.8"/>
+              </svg>
+            </div>
             <div class="juice-name">Guaraná Zero</div>
           </div>
           <div class="soda-flavor-card" data-soda="Coca Zero" onclick="addSoda('Coca Zero')">
             <!-- 🖼️ <img src="imagens/coca.jpg" class="soda-img" /> -->
-            <div class="juice-img-placeholder">⚫</div>
+            <div class="soda-img-placeholder soda-coca">
+              <svg class="soda-cup-art" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+                <path class="soda-cup-straw" d="M31 4l7-2 1.4 4.4-5.7 1.7-3 27.9h-4L31 4z"/>
+                <path class="soda-cup-lid" d="M12 13h24l-1.5 5h-21L12 13z"/>
+                <path class="soda-cup-body" d="M15 18h18l-2.2 24H17.2L15 18z"/>
+                <circle class="soda-cup-bubble" cx="23" cy="27" r="2.2"/>
+                <circle class="soda-cup-bubble" cx="28" cy="33" r="1.8"/>
+              </svg>
+            </div>
             <div class="juice-name">Coca Zero</div>
           </div>
         </div>
