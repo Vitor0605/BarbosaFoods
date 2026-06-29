@@ -48,7 +48,7 @@ const TURMAS_GRUPOS = [
     turmas: ['1°DS', '2°DS', '3°DS']
   },
   {
-    grupo: 'Formação de Docentes',
+    grupo: 'Finanças / Administração',
     turmas: ['1°FD', '2°FD', '3°FD']
   },
   {
@@ -61,12 +61,15 @@ const TURMAS_GRUPOS = [
    ESTADO
 ══════════════════════════════════════ */
 const BREAD_PRICES    = { medio: 10, grande: 15 };
+const SODA_PRICE      = 5.00;
 const MAX_COMPS_MEDIO = 3;
+const MAX_SODAS       = 3;
 
 let selectedTurma   = null;
 let selectedBread   = null;
 let selectedPayment = null;
-let selectedJuice   = null;
+let selectedJuice   = null;   // suco grátis (string ou null)
+let sodaCart        = [];     // array de strings, ex: ['Guaraná Zero', 'Coca Zero']
 let currentFilter   = 'todos';
 let allOrders       = [];
 let currentUser     = null;
@@ -269,14 +272,38 @@ function voltarIdentificacao() {
 }
 
 /* ══════════════════════════════════════
-   PÃO
+   PÃO (opcional)
 ══════════════════════════════════════ */
 function selectBread(type) {
+  // Toggle: clicar no mesmo pão desmarca
+  if (selectedBread === type) {
+    selectedBread = null;
+    document.getElementById('bread-medio').classList.remove('selected');
+    document.getElementById('bread-grande').classList.remove('selected');
+    // Desabilita complementos
+    document.querySelectorAll('.comp-item')
+      .forEach(el => { el.classList.remove('selected'); el.classList.add('disabled'); });
+    document.getElementById('comps-label').style.display  = 'none';
+    document.getElementById('comps-grid').style.display   = 'none';
+    document.getElementById('limit-warn').style.display   = 'none';
+    // Trava suco
+    updateJuiceLock();
+    updateSummary();
+    return;
+  }
+
   selectedBread = type;
   document.getElementById('bread-medio').classList.toggle('selected', type === 'medio');
   document.getElementById('bread-grande').classList.toggle('selected', type === 'grande');
+
+  // Mostra complementos
+  document.getElementById('comps-label').style.display = 'block';
+  document.getElementById('comps-grid').style.display  = 'grid';
   document.querySelectorAll('.comp-item').forEach(el => el.classList.remove('disabled'));
   if (type === 'medio') enforceLimit();
+
+  // Libera suco
+  updateJuiceLock();
   updateSummary();
 }
 
@@ -304,12 +331,75 @@ function enforceLimit() {
 }
 
 /* ══════════════════════════════════════
-   BEBIDA
+   SUCO — só disponível com dogão
 ══════════════════════════════════════ */
+function updateJuiceLock() {
+  const hasBread = !!selectedBread;
+  const juiceItems = document.querySelectorAll('.juice-item');
+  const note  = document.getElementById('juice-locked-note');
+  const tag   = document.getElementById('juice-tag');
+
+  if (hasBread) {
+    juiceItems.forEach(el => el.classList.remove('juice-locked'));
+    note.style.display = 'none';
+    tag.textContent    = 'incluso com o dogão';
+  } else {
+    juiceItems.forEach(el => {
+      el.classList.add('juice-locked');
+      el.classList.remove('selected');
+    });
+    selectedJuice      = null;
+    note.style.display = 'block';
+    tag.textContent    = '🔒 requer dogão';
+  }
+}
+
 function selectJuice(el) {
+  if (el.classList.contains('juice-locked')) return;
   document.querySelectorAll('.juice-item').forEach(j => j.classList.remove('selected'));
   el.classList.add('selected');
   selectedJuice = el.dataset.juice;
+  updateSummary();
+}
+
+/* ══════════════════════════════════════
+   REFRIGERANTES — múltipla escolha, máx 3
+══════════════════════════════════════ */
+function addSoda(flavor) {
+  if (sodaCart.length >= MAX_SODAS) return;
+  sodaCart.push(flavor);
+  renderSodaCups();
+  updateSummary();
+}
+
+function removeSoda(index) {
+  sodaCart.splice(index, 1);
+  renderSodaCups();
+  updateSummary();
+}
+
+function renderSodaCups() {
+  const wrap      = document.getElementById('soda-cups-wrap');
+  const list      = document.getElementById('soda-cups-list');
+  const badge     = document.getElementById('soda-count-badge');
+  const limitWarn = document.getElementById('soda-limit-warn');
+  const count     = sodaCart.length;
+
+  badge.textContent = `${count}/${MAX_SODAS}`;
+  wrap.style.display = count > 0 ? 'block' : 'none';
+  limitWarn.style.display = count >= MAX_SODAS ? 'block' : 'none';
+
+  // Greyed out flavor cards when at limit
+  document.querySelectorAll('.soda-flavor-card').forEach(c => {
+    c.classList.toggle('soda-disabled', count >= MAX_SODAS);
+  });
+
+  list.innerHTML = sodaCart.map((flavor, i) => `
+    <div class="soda-cup-chip">
+      <span>${flavor}</span>
+      <button onclick="removeSoda(${i})" class="soda-cup-remove" title="Remover">✕</button>
+    </div>
+  `).join('');
 }
 
 /* ══════════════════════════════════════
@@ -325,19 +415,32 @@ function selectPayment(type) {
    TOTAL E RESUMO
 ══════════════════════════════════════ */
 function calcTotal() {
-  if (!selectedBread) return 0;
-  let total = BREAD_PRICES[selectedBread];
-  getSelectedComps().forEach(el => { total += parseFloat(el.dataset.price); });
+  let total = 0;
+  if (selectedBread) {
+    total += BREAD_PRICES[selectedBread];
+    getSelectedComps().forEach(el => { total += parseFloat(el.dataset.price); });
+  }
+  total += sodaCart.length * SODA_PRICE;
   return total;
 }
 
 function updateSummary() {
   let html = '';
-  if (selectedBread) html += `<div class="sum-row"><span>Pão ${selectedBread}</span><span>${fmtBRL(BREAD_PRICES[selectedBread])}</span></div>`;
-  getSelectedComps().forEach(el => {
-    html += `<div class="sum-row"><span>${el.dataset.name}</span><span>+${fmtBRL(parseFloat(el.dataset.price))}</span></div>`;
+
+  if (selectedBread) {
+    html += `<div class="sum-row"><span>Pão ${selectedBread}</span><span>${fmtBRL(BREAD_PRICES[selectedBread])}</span></div>`;
+    getSelectedComps().forEach(el => {
+      html += `<div class="sum-row"><span>${el.dataset.name}</span><span>+${fmtBRL(parseFloat(el.dataset.price))}</span></div>`;
+    });
+    if (selectedJuice) {
+      html += `<div class="sum-row"><span>${selectedJuice}</span><span class="sum-free">grátis</span></div>`;
+    }
+  }
+
+  sodaCart.forEach(flavor => {
+    html += `<div class="sum-row"><span>${flavor}</span><span>+${fmtBRL(SODA_PRICE)}</span></div>`;
   });
-  if (selectedJuice) html += `<div class="sum-row"><span>${selectedJuice}</span><span>incluso</span></div>`;
+
   document.getElementById('summary-lines').innerHTML   = html;
   document.getElementById('summary-total').textContent = fmtBRL(calcTotal());
 }
@@ -360,10 +463,17 @@ async function submitOrder() {
   const turma = selectedTurma;
 
   const st = statusAluno(nome, turma);
-  if (!st.podePedir)    { showOrderError(st.motivo); return; }
-  if (!selectedBread)   { showOrderError('Selecione o tamanho do pão.'); return; }
-  if (!selectedJuice)   { showOrderError('Escolha sua bebida.'); return; }
-  if (!selectedPayment) { showOrderError('Selecione a forma de pagamento.'); return; }
+  if (!st.podePedir) { showOrderError(st.motivo); return; }
+
+  if (!selectedBread && sodaCart.length === 0) {
+    showOrderError('Escolha um cachorro quente ou pelo menos um refrigerante.'); return;
+  }
+  if (selectedJuice && !selectedBread) {
+    showOrderError('O suco grátis só acompanha o dogão.'); return;
+  }
+  if (!selectedPayment) {
+    showOrderError('Selecione a forma de pagamento.'); return;
+  }
 
   const btn = document.getElementById('btn-submit-order');
   btn.disabled    = true;
@@ -376,9 +486,10 @@ async function submitOrder() {
   const order = {
     name:        nome,
     turma,
-    bread:       selectedBread,
+    bread:       selectedBread || null,
     complements: comps,
-    juice:       selectedJuice,
+    juice:       selectedJuice || null,
+    sodas:       [...sodaCart],
     payment:     selectedPayment,
     total,
     status:      selectedPayment === 'pix' ? 'aguardando_pix' : 'pendente_dinheiro',
@@ -387,21 +498,24 @@ async function submitOrder() {
     timeStr:     now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     dateStr:     fmtDate(now.toISOString()),
     userUid:     currentUser ? currentUser.uid : null
-    // SEGURANÇA: e-mail NÃO é salvo pelo cliente — use Firestore Rules ou Cloud Functions
-    // para validar userUid server-side se precisar de mais segurança.
   };
 
   try {
-    await addDoc(pedidosRef, order); // Aguarda confirmação real do Firestore
+    await addDoc(pedidosRef, order);
 
-    // Só aqui mostramos sucesso
     document.getElementById('screen-order').style.display   = 'none';
     document.getElementById('screen-success').style.display = 'block';
 
-    const compText = comps.length ? comps.join(', ') : 'sem complementos extras';
+    const parts = [];
+    if (selectedBread) {
+      const compText = comps.length ? comps.join(', ') : 'sem complementos';
+      parts.push(`Pão ${selectedBread} (${compText})`);
+      if (selectedJuice) parts.push(selectedJuice);
+    }
+    if (sodaCart.length) parts.push(sodaCart.join(' + '));
+
     document.getElementById('suc-title').textContent = `Pedido de ${nome} registrado! 🎉`;
-    document.getElementById('suc-sub').textContent   =
-      `Turma ${turma} · Pão ${selectedBread} · ${compText} · ${selectedJuice}`;
+    document.getElementById('suc-sub').textContent   = `Turma ${turma} · ${parts.join(' · ')}`;
 
     document.getElementById('pix-info').style.display = 'none';
     document.getElementById('din-info').style.display  = 'none';
@@ -429,12 +543,24 @@ function resetOrderForm() {
   selectedBread   = null;
   selectedPayment = null;
   selectedJuice   = null;
+  sodaCart        = [];
+
   document.querySelectorAll('.bread-card, .comp-item, .juice-item, .pay-card')
     .forEach(el => el.classList.remove('selected'));
   document.querySelectorAll('.comp-item')
     .forEach(el => el.classList.add('disabled'));
-  document.getElementById('limit-warn').style.display      = 'none';
-  document.getElementById('order-error-box').style.display = 'none';
+
+  document.getElementById('comps-label').style.display      = 'none';
+  document.getElementById('comps-grid').style.display       = 'none';
+  document.getElementById('limit-warn').style.display       = 'none';
+  document.getElementById('order-error-box').style.display  = 'none';
+  document.getElementById('soda-cups-wrap').style.display   = 'none';
+  document.getElementById('soda-limit-warn').style.display  = 'none';
+  document.getElementById('soda-cups-list').innerHTML       = '';
+  document.getElementById('soda-count-badge').textContent   = `0/${MAX_SODAS}`;
+  document.querySelectorAll('.soda-flavor-card').forEach(c => c.classList.remove('soda-disabled'));
+
+  updateJuiceLock();
   updateSummary();
 }
 
@@ -555,6 +681,13 @@ function renderOrders() {
     const removerBtn = `<button class="btn-action btn-remove" onclick="removeOrder('${fid}')">✕ Remover</button>`;
 
     const compText = o.complements && o.complements.length ? o.complements.join(', ') : 'sem complementos extras';
+    const sodaText = o.sodas && o.sodas.length ? o.sodas.join(', ') : null;
+    const juiceText = o.juice || null;
+
+    const drinkLine = [
+      juiceText ? `${juiceText} (grátis)` : null,
+      sodaText  ? `Refri: ${sodaText}`    : null
+    ].filter(Boolean).join(' · ') || 'sem bebida';
 
     return `
       <div class="order-card ${statusClass}" id="order-${fid}">
@@ -570,8 +703,8 @@ function renderOrders() {
           <div>${badge}</div>
         </div>
         <div class="order-detail">
-          Pão ${o.bread} · ${compText}<br>
-          ${o.juice} · Pagamento: ${o.payment === 'pix' ? 'Pix' : 'Dinheiro'}
+          ${o.bread ? `Pão ${o.bread} · ${compText}` : 'Sem dogão'}<br>
+          ${drinkLine} · Pagamento: ${o.payment === 'pix' ? 'Pix' : 'Dinheiro'}
         </div>
         <div class="order-footer">
           <div class="order-total">${fmtBRL(o.total)}</div>
@@ -652,6 +785,7 @@ Object.assign(window, {
   toggleTheme, loginWithGoogle, logout,
   selecionarTurma, onNomeInput, continuar, voltarIdentificacao,
   selectBread, toggleComp, selectJuice, selectPayment,
+  addSoda, removeSoda,
   submitOrder, voltarInicio,
   refreshAdmin, filterOrders,
   confirmPayment, toggleOculto, removeOrder, adminClearAll
