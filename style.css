@@ -722,3 +722,226 @@ body {
   transition: all 0.15s;
 }
 .btn-danger:hover { background: var(--red); color: #fff; }
+
+/* ══════════════════════════════════════
+   CAMPO DE NOME — estilizado
+══════════════════════════════════════ */
+.name-input-wrap {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.name-input-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.name-input-field {
+  width: 100%;
+  padding: 13px 14px 13px 46px;
+  font-size: 16px;
+  font-weight: 500;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  letter-spacing: 0.01em;
+}
+
+.name-input-field:focus {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 4px var(--orange-light);
+}
+
+.name-input-field::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* ══════════════════════════════════════
+   PÃO OPCIONAL
+══════════════════════════════════════ */
+.optional-tag {
+  background: var(--bg-card-2) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border) !important;
+}
+
+.bread-optional-note {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: var(--bg-card-2);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--orange);
+}
+
+/* ══════════════════════════════════════
+   SEÇÃO DE BEBIDAS
+══════════════════════════════════════ */
+.drink-group {
+  margin-bottom: 0.75rem;
+}
+
+.drink-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.drink-group-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.drink-group-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+
+.free-tag {
+  background: var(--green-light);
+  color: var(--green);
+  border: 1px solid rgba(72,187,120,0.3);
+}
+
+.paid-tag {
+  background: var(--orange-light);
+  color: var(--orange);
+  border: 1px solid var(--orange-border);
+}
+
+.drink-group-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.drink-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 1rem 0;
+}
+
+/* Suco travado */
+.juice-locked {
+  opacity: 0.38;
+  cursor: not-allowed !important;
+  pointer-events: none;
+  filter: grayscale(0.5);
+}
+
+/* Grid de sucos — 3 colunas fixas */
+#juice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+/* ══════════════════════════════════════
+   REFRIGERANTES — seletor e copos
+══════════════════════════════════════ */
+.soda-flavor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.soda-flavor-card {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: center;
+  background: var(--bg-card);
+  transition: all 0.15s;
+  overflow: hidden;
+}
+
+.soda-flavor-card:hover:not(.soda-disabled) {
+  border-color: var(--orange-border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255,107,53,0.2);
+}
+
+.soda-flavor-card.soda-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Copos selecionados */
+.soda-cups-wrap {
+  margin-top: 8px;
+}
+
+.soda-cups-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#soda-count-badge {
+  background: var(--orange-light);
+  color: var(--orange);
+  border: 1px solid var(--orange-border);
+  border-radius: 20px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.soda-cups-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.soda-cup-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 10px 5px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.soda-cup-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.soda-cup-remove:hover { color: var(--red); }
+
+/* "grátis" no resumo */
+.sum-free {
+  color: var(--green);
+  font-weight: 600;
+  font-size: 13px;
+}
