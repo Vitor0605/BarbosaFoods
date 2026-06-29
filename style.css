@@ -2,6 +2,8 @@
    BARBOSAFOODS — style.css
 ═══════════════════════════════════════════════════════ */
 
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ── TEMA ESCURO (padrão) ── */
@@ -35,9 +37,9 @@
   --red:          #fc8181;
   --red-light:    rgba(252,129,129,0.15);
 
-  --radius:    12px;
-  --radius-sm:  8px;
-  --radius-xs:  6px;
+  --radius:    18px;
+  --radius-sm:  14px;
+  --radius-xs:  10px;
 }
 
 /* ── TEMA CLARO ── */
@@ -74,7 +76,7 @@
 
 /* ── BASE ── */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -727,42 +729,39 @@ body {
    CAMPO DE NOME — estilizado
 ══════════════════════════════════════ */
 .name-input-wrap {
-  position: relative;
-  margin-bottom: 10px;
-}
-
-.name-input-icon {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 18px;
-  pointer-events: none;
-  user-select: none;
+  width: 100%;
+  margin-bottom: 12px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 5px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.12);
 }
 
 .name-input-field {
   width: 100%;
-  padding: 13px 14px 13px 46px;
-  font-size: 16px;
-  font-weight: 500;
-  border: 2px solid var(--border);
+  min-height: 58px;
+  padding: 0 18px;
+  font-size: 17px;
+  font-weight: 600;
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  background: var(--bg-card);
+  background: var(--bg-surface);
   color: var(--text);
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
   letter-spacing: 0.01em;
 }
 
 .name-input-field:focus {
   border-color: var(--orange);
+  background: var(--bg-card-2);
   box-shadow: 0 0 0 4px var(--orange-light);
 }
 
 .name-input-field::placeholder {
-  color: var(--text-muted);
-  font-weight: 400;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 /* ══════════════════════════════════════
@@ -851,6 +850,46 @@ body {
   margin-bottom: 0;
 }
 
+
+.soda-img-placeholder {
+  height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at top, var(--orange-light), var(--bg-card-2));
+  border-bottom: 1px dashed var(--border);
+}
+
+.soda-cup-art {
+  width: 44px;
+  height: 44px;
+  color: var(--orange);
+  filter: drop-shadow(0 6px 10px rgba(255,107,53,0.18));
+}
+
+.soda-cup-straw { fill: var(--orange); }
+.soda-cup-lid { fill: var(--yellow-light); stroke: var(--orange); stroke-width: 2; stroke-linejoin: round; }
+.soda-cup-body { fill: var(--orange-light); stroke: var(--orange); stroke-width: 2; stroke-linejoin: round; }
+.soda-cup-bubble { fill: var(--yellow); opacity: 0.95; }
+
+.soda-guarana .soda-cup-body { fill: var(--green-light); stroke: var(--green); }
+.soda-guarana .soda-cup-straw { fill: var(--green); }
+.soda-coca .soda-cup-body { fill: rgba(0,0,0,0.18); stroke: var(--orange); }
+
+.drink-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.drink-title-icon .soda-cup-art {
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+}
+
 /* ══════════════════════════════════════
    REFRIGERANTES — seletor e copos
 ══════════════════════════════════════ */
@@ -917,31 +956,82 @@ body {
 .soda-cup-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   background: var(--bg-card-2);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 5px 10px 5px 12px;
+  border: 1px solid var(--orange-border);
+  border-radius: 999px;
+  padding: 6px 7px 6px 10px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.10);
+}
+
+.soda-chip-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.soda-chip-icon .soda-cup-art {
+  width: 22px;
+  height: 22px;
+}
+
+.soda-chip-name {
+  line-height: 1;
 }
 
 .soda-cup-remove {
-  background: none;
-  border: none;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--orange-border);
+  border-radius: 999px;
   cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 12px;
-  padding: 0 2px;
+  background: var(--orange-light);
+  color: var(--orange);
+  padding: 0;
   line-height: 1;
-  transition: color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.15s, border-color 0.15s;
 }
-.soda-cup-remove:hover { color: var(--red); }
+
+.remove-icon {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.soda-cup-remove:hover {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+  transform: scale(1.06);
+}
 
 /* "grátis" no resumo */
 .sum-free {
   color: var(--green);
   font-weight: 600;
   font-size: 13px;
+}
+
+
+@media (max-width: 430px) {
+  .name-input-field {
+    font-size: 16px;
+    min-height: 56px;
+  }
+
+  .drink-group-header {
+    flex-wrap: wrap;
+  }
 }
