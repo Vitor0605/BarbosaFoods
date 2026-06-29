@@ -32,7 +32,7 @@ const pedidosRef   = collection(db, "pedidos");
    Qualquer outro e-mail autenticado vai para a tela de pedido.
 ────────────────────────────────────────────────────────── */
 const ADMIN_EMAILS = [
-  "vitor.guilherme.cardoso@escola.pr.gov.br"   // ← troque pelo seu e-mail real
+  "vitorjoseg4@gmail.com"
 ];
 
 /* ══════════════════════════════════════
@@ -64,6 +64,16 @@ const BREAD_PRICES    = { medio: 10, grande: 15 };
 const SODA_PRICE      = 5.00;
 const MAX_COMPS_MEDIO = 3;
 const MAX_SODAS       = 3;
+
+const SODA_CUP_ICON = `
+  <svg class="soda-cup-art" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+    <path class="soda-cup-straw" d="M31 4l7-2 1.4 4.4-5.7 1.7-3 27.9h-4L31 4z"/>
+    <path class="soda-cup-lid" d="M12 13h24l-1.5 5h-21L12 13z"/>
+    <path class="soda-cup-body" d="M15 18h18l-2.2 24H17.2L15 18z"/>
+    <circle class="soda-cup-bubble" cx="23" cy="27" r="2.2"/>
+    <circle class="soda-cup-bubble" cx="28" cy="33" r="1.8"/>
+  </svg>
+`;
 
 let selectedTurma   = null;
 let selectedBread   = null;
@@ -120,9 +130,14 @@ function statusAluno(nome, turma) {
    /admin  → painel admin (só para ADMIN_EMAILS)
    /       → tela de pedido
 ══════════════════════════════════════ */
+function normalizedPath() {
+  const path = window.location.pathname.replace(/\/+$/, '');
+  return path || '/';
+}
+
 function isAdminRoute() {
-  return window.location.pathname.endsWith('/admin') ||
-         window.location.pathname.endsWith('/admin.html');
+  const path = normalizedPath();
+  return path === '/admin' || path === '/admin.html';
 }
 
 function routeUser(user) {
@@ -396,8 +411,13 @@ function renderSodaCups() {
 
   list.innerHTML = sodaCart.map((flavor, i) => `
     <div class="soda-cup-chip">
-      <span>${flavor}</span>
-      <button onclick="removeSoda(${i})" class="soda-cup-remove" title="Remover">✕</button>
+      <span class="soda-chip-icon">${SODA_CUP_ICON}</span>
+      <span class="soda-chip-name">${flavor}</span>
+      <button onclick="removeSoda(${i})" class="soda-cup-remove" title="Remover" aria-label="Remover ${flavor}">
+        <svg class="remove-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path d="M5.25 5.25L14.75 14.75M14.75 5.25L5.25 14.75"/>
+        </svg>
+      </button>
     </div>
   `).join('');
 }
