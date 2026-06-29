@@ -60,8 +60,11 @@
 
       <div id="nome-section" style="display:none;">
         <div class="section-label" style="margin-top:1.25rem;">2. Seu nome completo</div>
-        <input class="input-field" type="text" id="customer-name"
-          placeholder="Digite seu nome..." oninput="onNomeInput()" autocomplete="off" />
+        <div class="name-input-wrap">
+          <span class="name-input-icon">🧑</span>
+          <input class="name-input-field" type="text" id="customer-name"
+            placeholder="Digite seu nome completo..." oninput="onNomeInput()" autocomplete="off" />
+        </div>
         <div id="student-status-box"></div>
       </div>
 
@@ -80,8 +83,9 @@
         <button onclick="voltarIdentificacao()">Trocar</button>
       </div>
 
-      <!-- PÃO -->
-      <div class="section-label">1. Escolha o pão</div>
+      <!-- PÃO (opcional) -->
+      <div class="section-label">1. Cachorro quente <span class="label-tag optional-tag">opcional</span></div>
+      <div class="bread-optional-note">Não quer o dogão? Pule direto para as bebidas.</div>
       <div class="bread-grid">
         <div class="bread-card" id="bread-medio" onclick="selectBread('medio')">
           <!-- 🖼️ <img src="imagens/pao-medio.jpg" class="card-img" /> -->
@@ -104,7 +108,7 @@
       </div>
 
       <!-- COMPLEMENTOS -->
-      <div class="section-label">2. Complementos</div>
+      <div class="section-label" id="comps-label" style="display:none;">2. Complementos</div>
       <div id="limit-warn" class="warn-box" style="display:none;">
         ⚠️ Pão médio: máximo 3 complementos. Remova um para trocar.
       </div>
@@ -170,40 +174,68 @@
 
       <hr class="divider" />
 
-      <!-- BEBIDA (suco + refrigerante) -->
-      <div class="section-label">3. Escolha sua bebida <span class="label-tag">incluso</span></div>
-      <div class="juice-grid">
+      <!-- BEBIDAS -->
+      <div class="section-label">3. Bebidas</div>
 
-        <div class="juice-item" data-juice="Suco de Laranja" onclick="selectJuice(this)">
-          <!-- 🖼️ <img src="imagens/suco-laranja.jpg" class="juice-img" /> -->
-          <div class="juice-img-placeholder">🍊</div>
-          <div class="juice-name">Laranja</div>
+      <!-- SUCOS (grátis, só com dogão) -->
+      <div class="drink-group">
+        <div class="drink-group-header">
+          <span class="drink-group-title">🧃 Suco</span>
+          <span class="drink-group-tag free-tag" id="juice-tag">incluso com o dogão</span>
+        </div>
+        <div class="drink-group-note" id="juice-locked-note">Escolha um cachorro quente para desbloquear o suco grátis.</div>
+        <div class="juice-grid" id="juice-grid">
+          <div class="juice-item juice-locked" data-juice="Suco de Laranja" onclick="selectJuice(this)">
+            <!-- 🖼️ <img src="imagens/suco-laranja.jpg" class="juice-img" /> -->
+            <div class="juice-img-placeholder">🍊</div>
+            <div class="juice-name">Laranja</div>
+          </div>
+          <div class="juice-item juice-locked" data-juice="Suco de Morango" onclick="selectJuice(this)">
+            <!-- 🖼️ <img src="imagens/suco-morango.jpg" class="juice-img" /> -->
+            <div class="juice-img-placeholder">🍓</div>
+            <div class="juice-name">Morango</div>
+          </div>
+          <div class="juice-item juice-locked" data-juice="Suco de Abacaxi" onclick="selectJuice(this)">
+            <!-- 🖼️ <img src="imagens/suco-abacaxi.jpg" class="juice-img" /> -->
+            <div class="juice-img-placeholder">🍍</div>
+            <div class="juice-name">Abacaxi</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEPARADOR -->
+      <div class="drink-separator"></div>
+
+      <!-- REFRIGERANTES (+R$5,00 cada, múltipla escolha, máx 3) -->
+      <div class="drink-group">
+        <div class="drink-group-header">
+          <span class="drink-group-title">🥤 Refrigerante</span>
+          <span class="drink-group-tag paid-tag">+R$ 5,00 por copo</span>
+        </div>
+        <div class="drink-group-note">Pode escolher até 3 copos. Pode repetir o mesmo sabor.</div>
+
+        <!-- Seletor de sabores -->
+        <div class="soda-flavor-grid">
+          <div class="soda-flavor-card" data-soda="Guaraná Zero" onclick="addSoda('Guaraná Zero')">
+            <!-- 🖼️ <img src="imagens/guarana.jpg" class="soda-img" /> -->
+            <div class="juice-img-placeholder">🟢</div>
+            <div class="juice-name">Guaraná Zero</div>
+          </div>
+          <div class="soda-flavor-card" data-soda="Coca Zero" onclick="addSoda('Coca Zero')">
+            <!-- 🖼️ <img src="imagens/coca.jpg" class="soda-img" /> -->
+            <div class="juice-img-placeholder">⚫</div>
+            <div class="juice-name">Coca Zero</div>
+          </div>
         </div>
 
-        <div class="juice-item" data-juice="Suco de Morango" onclick="selectJuice(this)">
-          <!-- 🖼️ <img src="imagens/suco-morango.jpg" class="juice-img" /> -->
-          <div class="juice-img-placeholder">🍓</div>
-          <div class="juice-name">Morango</div>
+        <!-- Copos selecionados -->
+        <div class="soda-cups-wrap" id="soda-cups-wrap" style="display:none;">
+          <div class="soda-cups-label">Seus copos <span id="soda-count-badge">0/3</span></div>
+          <div class="soda-cups-list" id="soda-cups-list"></div>
         </div>
-
-        <div class="juice-item" data-juice="Suco de Abacaxi" onclick="selectJuice(this)">
-          <!-- 🖼️ <img src="imagens/suco-abacaxi.jpg" class="juice-img" /> -->
-          <div class="juice-img-placeholder">🍍</div>
-          <div class="juice-name">Abacaxi</div>
+        <div class="soda-limit-warn warn-box" id="soda-limit-warn" style="display:none;">
+          ⚠️ Limite de 3 copos atingido.
         </div>
-
-        <div class="juice-item" data-juice="Guaraná Zero" onclick="selectJuice(this)">
-          <!-- 🖼️ <img src="imagens/guarana.jpg" class="juice-img" /> -->
-          <div class="juice-img-placeholder">🥤</div>
-          <div class="juice-name">Guaraná Zero</div>
-        </div>
-
-        <div class="juice-item" data-juice="Coca Zero" onclick="selectJuice(this)">
-          <!-- 🖼️ <img src="imagens/coca.jpg" class="juice-img" /> -->
-          <div class="juice-img-placeholder">🥤</div>
-          <div class="juice-name">Coca Zero</div>
-        </div>
-
       </div>
 
       <hr class="divider" />
