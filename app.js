@@ -32,7 +32,7 @@ const pedidosRef   = collection(db, "pedidos");
    Qualquer outro e-mail autenticado vai para a tela de pedido.
 ────────────────────────────────────────────────────────── */
 const ADMIN_EMAILS = [
-  "seu-email-admin@gmail.com"   // ← troque pelo seu e-mail real
+  "vitor.guilherme.cardoso@escola.pr.gov.br"   // ← troque pelo seu e-mail real
 ];
 
 /* ══════════════════════════════════════
