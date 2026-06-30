@@ -4,7 +4,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, addDoc, updateDoc,
-  onSnapshot, query, orderBy
+  onSnapshot, query, orderBy, getDoc, setDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 /* ═══════════════════════════════════════════════════════
@@ -26,6 +26,7 @@ const firebaseApp  = initializeApp(firebaseConfig);
 const auth         = getAuth(firebaseApp);
 const db           = getFirestore(firebaseApp);
 const pedidosRef   = collection(db, "pedidos");
+const usuariosRef  = collection(db, "usuarios");
 
 /* ── E-mails com acesso ao admin ─────────────────────────
    Adicione aqui os e-mails que podem ver o painel admin.
@@ -64,7 +65,13 @@ const BREAD_PRICES    = { medio: 10, grande: 15 };
 const SODA_PRICE      = 5.00;
 const MAX_COMPS_MEDIO = 3;
 const MAX_SODAS       = 3;
-const MAX_SAUCES      = 3;
+const MAX_SWEETS      = 10;
+
+const SWEETS = {
+  canudo_frito: { name: 'Canudo frito', price: 1.00, icon: '🥐' },
+  barrinha_cereal: { name: 'Barrinha de cereal', price: 3.00, icon: '🍫' },
+  brownie_chocolate: { name: 'Brownie de chocolate', price: 5.00, icon: '🍩' }
+};
 
 const SODA_CUP_ICON = `
   <svg class="soda-cup-art" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
@@ -80,12 +87,13 @@ let selectedTurma   = null;
 let selectedBread   = null;
 let selectedPayment = null;
 let selectedJuice   = null;   // suco grátis (string ou null)
-let selectedSauces  = [];      // molhos grátis escolhidos
 let sodaCart        = [];     // array de strings, ex: ['Guaraná Zero', 'Coca Zero']
+let sweetCart       = { canudo_frito: 0, barrinha_cereal: 0, brownie_chocolate: 0 };
 let currentFilter   = 'todos';
 let currentTurmaFilter = 'todas';
 let allOrders       = [];
 let currentUser     = null;
+let currentProfile  = null;
 let isAdmin         = false;
 let unsubOrders     = null;
 
@@ -107,16 +115,41 @@ function getSelectedComps() {
   return Array.from(document.querySelectorAll('.comp-item.selected'));
 }
 
+function getSelectedSauces() {
+  return Array.from(document.querySelectorAll('.sauce-item.selected')).map(el => el.dataset.sauce);
+}
+
+function getSweetEntries() {
+  return Object.entries(sweetCart)
+    .filter(([, qty]) => qty > 0)
+    .map(([id, qty]) => ({ id, qty, ...SWEETS[id] }));
+}
+
+function getTotalSweets() {
+  return Object.values(sweetCart).reduce((sum, qty) => sum + qty, 0);
+}
+
+function getProfileName() {
+  return currentProfile && currentProfile.nome ? currentProfile.nome.trim() : '';
+}
+
+function isOrderOpen(o) {
+  return o.status !== 'pago' && o.status !== 'cancelado';
+}
+
 function pedidosDoAluno(nome, turma) {
-  return allOrders.filter(o =>
-    o.name && o.name.trim().toLowerCase() === nome.trim().toLowerCase() &&
-    o.turma === turma
-  );
+  const cleanName = nome.trim().toLowerCase();
+  return allOrders.filter(o => {
+    if (o.status === 'cancelado') return false;
+    const sameUser = currentUser && o.userUid && o.userUid === currentUser.uid;
+    const sameNameTurma = o.name && o.name.trim().toLowerCase() === cleanName && o.turma === turma;
+    return sameUser || sameNameTurma;
+  });
 }
 
 function statusAluno(nome, turma) {
   const pedidos   = pedidosDoAluno(nome, turma);
-  const nao_pagos = pedidos.filter(o => o.status !== 'pago');
+  const nao_pagos = pedidos.filter(o => isOrderOpen(o));
   if (nao_pagos.length > 0) {
     const p = nao_pagos[0];
     return {
@@ -126,6 +159,180 @@ function statusAluno(nome, turma) {
     };
   }
   return { podePedir: true, motivo: '', pedidos };
+}
+
+
+/* ══════════════════════════════════════
+   PERFIL DO USUÁRIO — Firestore /usuarios/{uid}
+══════════════════════════════════════ */
+async function loadUserProfile(user) {
+  if (!user) { currentProfile = null; return; }
+
+  const ref = doc(db, 'usuarios', user.uid);
+  try {
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      currentProfile = { uid: user.uid, ...snap.data() };
+      await setDoc(ref, {
+        email: user.email || '',
+        photoURL: user.photoURL || '',
+        googleDisplayName: user.displayName || '',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } else {
+      currentProfile = {
+        uid: user.uid,
+        nome: '',
+        email: user.email || '',
+        photoURL: user.photoURL || '',
+        googleDisplayName: user.displayName || ''
+      };
+      await setDoc(ref, {
+        nome: '',
+        email: user.email || '',
+        photoURL: user.photoURL || '',
+        googleDisplayName: user.displayName || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+    applyProfileNameToForm();
+    renderProfileOrders();
+  } catch (err) {
+    console.error('Erro ao carregar perfil:', err);
+  }
+}
+
+function applyProfileNameToForm() {
+  const input = document.getElementById('customer-name');
+  const hint = document.getElementById('locked-name-hint');
+  if (!input) return;
+
+  const savedName = getProfileName();
+  if (savedName) {
+    input.value = savedName;
+    input.readOnly = true;
+    input.classList.add('name-locked');
+    if (hint) {
+      hint.style.display = 'block';
+      hint.textContent = 'Nome salvo no seu perfil. Para alterar, toque na sua foto no topo.';
+    }
+  } else {
+    input.readOnly = false;
+    input.classList.remove('name-locked');
+    if (hint) hint.style.display = 'none';
+    if (currentUser && !input.value.trim()) input.value = currentUser.displayName || '';
+  }
+}
+
+async function saveProfileName(nome) {
+  if (!currentUser) return;
+  const clean = nome.trim();
+  if (clean.length < 3) return;
+  const ref = doc(db, 'usuarios', currentUser.uid);
+  await setDoc(ref, {
+    nome: clean,
+    email: currentUser.email || '',
+    photoURL: currentUser.photoURL || '',
+    googleDisplayName: currentUser.displayName || '',
+    updatedAt: new Date().toISOString()
+  }, { merge: true });
+  currentProfile = { ...(currentProfile || {}), uid: currentUser.uid, nome: clean };
+  applyProfileNameToForm();
+}
+
+function openProfile() {
+  if (!currentUser) return;
+  const modal = document.getElementById('profile-modal');
+  const photo = document.getElementById('profile-photo');
+  const email = document.getElementById('profile-email');
+  const nameInput = document.getElementById('profile-name-input');
+  const savedName = getProfileName();
+
+  if (photo) photo.src = currentUser.photoURL || 'https://www.gstatic.com/images/branding/product/2x/avatar_anonymous_96x96dp.png';
+  if (email) email.textContent = currentUser.email || '';
+  if (nameInput) nameInput.value = savedName || currentUser.displayName || '';
+  if (modal) modal.style.display = 'flex';
+  renderProfileOrders();
+}
+
+function closeProfile() {
+  const modal = document.getElementById('profile-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function saveProfileFromModal() {
+  const input = document.getElementById('profile-name-input');
+  const status = document.getElementById('profile-save-status');
+  const nome = input ? input.value.trim() : '';
+  if (nome.length < 3) {
+    if (status) { status.textContent = 'Digite um nome com pelo menos 3 letras.'; status.className = 'profile-status error'; }
+    return;
+  }
+  try {
+    await saveProfileName(nome);
+    if (status) { status.textContent = 'Nome salvo com sucesso.'; status.className = 'profile-status ok'; }
+    onNomeInput();
+    renderProfileOrders();
+  } catch (err) {
+    if (status) { status.textContent = 'Erro ao salvar o nome.'; status.className = 'profile-status error'; }
+    console.error(err);
+  }
+}
+
+function renderProfileOrders() {
+  const list = document.getElementById('profile-orders-list');
+  if (!list || !currentUser) return;
+
+  const pedidos = allOrders
+    .filter(o => o.userUid === currentUser.uid)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  if (!pedidos.length) {
+    list.innerHTML = '<div class="empty-state small">Você ainda não fez nenhum pedido.</div>';
+    return;
+  }
+
+  list.innerHTML = pedidos.map(o => {
+    const doces = formatSweets(o.sweets);
+    const sauces = o.sauces && o.sauces.length ? `Molhos: ${o.sauces.join(', ')}` : '';
+    const comps = o.complements && o.complements.length ? o.complements.join(', ') : 'sem complementos extras';
+    const drinks = [o.juice ? `${o.juice} grátis` : null, o.sodas && o.sodas.length ? `Refri: ${o.sodas.join(', ')}` : null].filter(Boolean).join(' · ');
+    const canCancel = o.status !== 'pago' && o.status !== 'cancelado';
+    const statusText = o.status === 'pago' ? 'Pago' : o.status === 'cancelado' ? 'Cancelado' : o.status === 'aguardando_pix' ? 'Aguardando Pix' : 'Pagar Pessoalmente';
+    const cancelBtn = canCancel ? `<button class="profile-cancel-btn" onclick="cancelMyOrder('${o.firestoreId}')">Cancelar pedido</button>` : '';
+    return `
+      <div class="profile-order-card ${o.status === 'cancelado' ? 'canceled' : ''}">
+        <div class="profile-order-top">
+          <strong>${fmtBRL(o.total || 0)}</strong>
+          <span>${statusText}</span>
+        </div>
+        <div class="profile-order-meta">${o.dateStr || ''} · ${o.timeStr || ''} · ${o.turma || ''}</div>
+        <div class="profile-order-detail">
+          ${o.bread ? `Pão ${o.bread} · ${comps}` : 'Sem dogão'}<br>
+          ${sauces ? `${sauces}<br>` : ''}
+          ${drinks || 'sem bebida'}${doces ? `<br>Doces: ${doces}` : ''}
+        </div>
+        ${cancelBtn}
+      </div>`;
+  }).join('');
+}
+
+async function cancelMyOrder(fid) {
+  const order = allOrders.find(o => o.firestoreId === fid && currentUser && o.userUid === currentUser.uid);
+  if (!order) return;
+  if (order.status === 'pago') { alert('Pedido pago não pode ser cancelado.'); return; }
+  if (!confirm('Cancelar este pedido?')) return;
+  try {
+    await updateDoc(doc(db, 'pedidos', fid), {
+      status: 'cancelado',
+      cancelado: true,
+      oculto: true,
+      canceledAt: new Date().toISOString()
+    });
+  } catch (err) {
+    alert('Erro ao cancelar pedido: ' + err.message);
+  }
 }
 
 /* ══════════════════════════════════════
@@ -220,6 +427,7 @@ function selecionarTurma(nome, el) {
   el.classList.add('selected');
 
   const nameInput = document.getElementById('customer-name');
+  applyProfileNameToForm();
   if (!nameInput.value.trim() && currentUser) {
     nameInput.value = currentUser.displayName || '';
   }
@@ -261,7 +469,7 @@ function onNomeInput() {
   }
 }
 
-function continuar() {
+async function continuar() {
   const nome = document.getElementById('customer-name').value.trim();
   if (!selectedTurma)  { showIdError('Selecione sua turma primeiro.'); return; }
   if (nome.length < 3) { showIdError('Digite seu nome completo.'); return; }
@@ -269,9 +477,17 @@ function continuar() {
   const st = statusAluno(nome, selectedTurma);
   if (!st.podePedir)   { showIdError(st.motivo); return; }
 
+  if (currentUser && !getProfileName()) {
+    try { await saveProfileName(nome); }
+    catch (err) { showIdError('Não consegui salvar seu nome no perfil. Tente novamente.'); return; }
+  }
+
+  const finalName = getProfileName() || nome;
+  document.getElementById('customer-name').value = finalName;
+
   document.getElementById('screen-identify').style.display = 'none';
   document.getElementById('screen-order').style.display    = 'block';
-  document.getElementById('pill-name').textContent         = `🧑 ${nome}  ·  ${selectedTurma}`;
+  document.getElementById('pill-name').textContent         = `🧑 ${finalName}  ·  ${selectedTurma}`;
 
   resetOrderForm();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -304,12 +520,7 @@ function selectBread(type) {
     document.getElementById('comps-label').style.display  = 'none';
     document.getElementById('comps-grid').style.display   = 'none';
     document.getElementById('limit-warn').style.display   = 'none';
-    document.getElementById('sauce-label').style.display = 'none';
-    document.getElementById('sauce-note').style.display  = 'none';
-    document.getElementById('sauce-grid').style.display  = 'none';
-    document.getElementById('sauce-warn').style.display  = 'none';
-    selectedSauces = [];
-    document.querySelectorAll('.sauce-item').forEach(el => el.classList.remove('selected'));
+    hideSauces();
     // Trava suco
     updateJuiceLock();
     updateSummary();
@@ -324,10 +535,8 @@ function selectBread(type) {
   document.getElementById('comps-label').style.display = 'block';
   document.getElementById('comps-grid').style.display  = 'grid';
   document.querySelectorAll('.comp-item').forEach(el => el.classList.remove('disabled'));
-  document.getElementById('sauce-label').style.display = 'block';
-  document.getElementById('sauce-note').style.display  = 'block';
-  document.getElementById('sauce-grid').style.display  = 'grid';
   if (type === 'medio') enforceLimit();
+  showSauces(true);
 
   // Libera suco
   updateJuiceLock();
@@ -357,24 +566,33 @@ function enforceLimit() {
   });
 }
 
+
 /* ══════════════════════════════════════
-   MOLHOS — grátis, escolha de 0 a 3
+   MOLHOS — grátis, padrão todos selecionados
 ══════════════════════════════════════ */
+function showSauces(selectAll = false) {
+  const label = document.getElementById('sauce-label');
+  const note = document.getElementById('sauce-note');
+  const grid = document.getElementById('sauce-grid');
+  if (label) label.style.display = 'flex';
+  if (note) note.style.display = 'block';
+  if (grid) grid.style.display = 'grid';
+  if (selectAll) document.querySelectorAll('.sauce-item').forEach(el => el.classList.add('selected'));
+}
+
+function hideSauces() {
+  const label = document.getElementById('sauce-label');
+  const note = document.getElementById('sauce-note');
+  const grid = document.getElementById('sauce-grid');
+  if (label) label.style.display = 'none';
+  if (note) note.style.display = 'none';
+  if (grid) grid.style.display = 'none';
+  document.querySelectorAll('.sauce-item').forEach(el => el.classList.remove('selected'));
+}
+
 function toggleSauce(el) {
   if (!selectedBread) return;
-  const name = el.dataset.sauce;
-  const isSelected = el.classList.contains('selected');
-
-  if (isSelected) {
-    el.classList.remove('selected');
-    selectedSauces = selectedSauces.filter(s => s !== name);
-  } else {
-    if (selectedSauces.length >= MAX_SAUCES) return;
-    el.classList.add('selected');
-    selectedSauces.push(name);
-  }
-
-  document.getElementById('sauce-warn').style.display = selectedSauces.length >= MAX_SAUCES ? 'block' : 'none';
+  el.classList.toggle('selected');
   updateSummary();
 }
 
@@ -455,6 +673,68 @@ function renderSodaCups() {
   `).join('');
 }
 
+
+/* ══════════════════════════════════════
+   DOCES — múltipla escolha, máx 10 unidades
+══════════════════════════════════════ */
+function addSweet(id) {
+  if (!SWEETS[id]) return;
+  if (getTotalSweets() >= MAX_SWEETS) return;
+  sweetCart[id] += 1;
+  renderSweets();
+  updateSummary();
+}
+
+function removeSweet(id) {
+  if (!SWEETS[id] || sweetCart[id] <= 0) return;
+  sweetCart[id] -= 1;
+  renderSweets();
+  updateSummary();
+}
+
+function renderSweets() {
+  const total = getTotalSweets();
+  const badge = document.getElementById('sweet-count-badge');
+  const warn = document.getElementById('sweet-limit-warn');
+  const listWrap = document.getElementById('sweet-selected-wrap');
+  const list = document.getElementById('sweet-selected-list');
+
+  if (badge) badge.textContent = `${total}/${MAX_SWEETS}`;
+  if (warn) warn.style.display = total >= MAX_SWEETS ? 'block' : 'none';
+  document.querySelectorAll('.sweet-card').forEach(card => card.classList.toggle('sweet-disabled', total >= MAX_SWEETS));
+
+  Object.keys(SWEETS).forEach(id => {
+    const qty = document.getElementById(`sweet-qty-${id}`);
+    const miniQty = document.getElementById(`sweet-mini-qty-${id}`);
+    const card = document.querySelector(`.sweet-card[data-sweet="${id}"]`);
+    if (qty) qty.textContent = sweetCart[id];
+    if (miniQty) miniQty.textContent = sweetCart[id];
+    if (card) card.classList.toggle('selected', sweetCart[id] > 0);
+  });
+
+  const entries = getSweetEntries();
+  if (listWrap) listWrap.style.display = entries.length ? 'block' : 'none';
+  if (list) {
+    list.innerHTML = entries.map(item => `
+      <div class="sweet-chip">
+        <span class="sweet-chip-icon">${item.icon}</span>
+        <span>${item.qty}x ${item.name}</span>
+        <button class="sweet-chip-remove" onclick="removeSweet('${item.id}')" title="Remover 1 ${item.name}" aria-label="Remover 1 ${item.name}">
+          <svg class="remove-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.25 5.25L14.75 14.75M14.75 5.25L5.25 14.75"/></svg>
+        </button>
+      </div>
+    `).join('');
+  }
+}
+
+function formatSweets(sweets) {
+  if (!sweets) return '';
+  return Object.entries(sweets)
+    .filter(([, qty]) => Number(qty) > 0)
+    .map(([id, qty]) => `${qty}x ${(SWEETS[id] && SWEETS[id].name) || id}`)
+    .join(', ');
+}
+
 /* ══════════════════════════════════════
    PAGAMENTO
 ══════════════════════════════════════ */
@@ -474,6 +754,7 @@ function calcTotal() {
     getSelectedComps().forEach(el => { total += parseFloat(el.dataset.price); });
   }
   total += sodaCart.length * SODA_PRICE;
+  getSweetEntries().forEach(item => { total += item.qty * item.price; });
   return total;
 }
 
@@ -485,9 +766,10 @@ function updateSummary() {
     getSelectedComps().forEach(el => {
       html += `<div class="sum-row"><span>${el.dataset.name}</span><span>+${fmtBRL(parseFloat(el.dataset.price))}</span></div>`;
     });
-    selectedSauces.forEach(sauce => {
-      html += `<div class="sum-row"><span>Molho: ${sauce}</span><span class="sum-free">grátis</span></div>`;
-    });
+    const sauces = getSelectedSauces();
+    if (sauces.length) {
+      html += `<div class="sum-row"><span>Molhos: ${sauces.join(', ')}</span><span class="sum-free">grátis</span></div>`;
+    }
     if (selectedJuice) {
       html += `<div class="sum-row"><span>${selectedJuice}</span><span class="sum-free">grátis</span></div>`;
     }
@@ -495,6 +777,10 @@ function updateSummary() {
 
   sodaCart.forEach(flavor => {
     html += `<div class="sum-row"><span>${flavor}</span><span>+${fmtBRL(SODA_PRICE)}</span></div>`;
+  });
+
+  getSweetEntries().forEach(item => {
+    html += `<div class="sum-row"><span>${item.qty}x ${item.name}</span><span>+${fmtBRL(item.qty * item.price)}</span></div>`;
   });
 
   document.getElementById('summary-lines').innerHTML   = html;
@@ -515,14 +801,14 @@ function showOrderError(msg) {
 async function submitOrder() {
   document.getElementById('order-error-box').style.display = 'none';
 
-  const nome  = document.getElementById('customer-name').value.trim();
+  const nome  = (getProfileName() || document.getElementById('customer-name').value).trim();
   const turma = selectedTurma;
 
   const st = statusAluno(nome, turma);
   if (!st.podePedir) { showOrderError(st.motivo); return; }
 
-  if (!selectedBread && sodaCart.length === 0) {
-    showOrderError('Escolha um cachorro quente ou pelo menos um refrigerante.'); return;
+  if (!selectedBread && sodaCart.length === 0 && getTotalSweets() === 0) {
+    showOrderError('Escolha um cachorro quente, refrigerante ou doce.'); return;
   }
   if (selectedJuice && !selectedBread) {
     showOrderError('O suco grátis só acompanha o dogão.'); return;
@@ -537,7 +823,8 @@ async function submitOrder() {
 
   const now   = new Date();
   const comps = getSelectedComps().map(el => el.dataset.name);
-  const sauces = [...selectedSauces];
+  const sauces = getSelectedSauces();
+  const sweets = Object.fromEntries(getSweetEntries().map(item => [item.id, item.qty]));
   const total = calcTotal();
 
   const order = {
@@ -548,6 +835,7 @@ async function submitOrder() {
     sauces,
     juice:       selectedJuice || null,
     sodas:       [...sodaCart],
+    sweets,
     payment:     selectedPayment,
     total,
     status:      selectedPayment === 'pix' ? 'aguardando_pix' : 'pendente_dinheiro',
@@ -555,7 +843,8 @@ async function submitOrder() {
     timestamp:   now.toISOString(),
     timeStr:     now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     dateStr:     fmtDate(now.toISOString()),
-    userUid:     currentUser ? currentUser.uid : null
+    userUid:     currentUser ? currentUser.uid : null,
+    userEmail:   currentUser ? currentUser.email : null
   };
 
   try {
@@ -566,12 +855,13 @@ async function submitOrder() {
 
     const parts = [];
     if (selectedBread) {
-      const compText = comps.length ? comps.join(', ') : 'sem complementos extras';
+      const compText = comps.length ? comps.join(', ') : 'sem complementos';
       const sauceText = sauces.length ? ` · molhos: ${sauces.join(', ')}` : '';
       parts.push(`Pão ${selectedBread} (${compText}${sauceText})`);
       if (selectedJuice) parts.push(selectedJuice);
     }
     if (sodaCart.length) parts.push(sodaCart.join(' + '));
+    if (getSweetEntries().length) parts.push('Doces: ' + getSweetEntries().map(item => `${item.qty}x ${item.name}`).join(', '));
 
     document.getElementById('suc-title').textContent = `Pedido de ${nome} registrado! 🎉`;
     document.getElementById('suc-sub').textContent   = `Turma ${turma} · ${parts.join(' · ')}`;
@@ -602,10 +892,10 @@ function resetOrderForm() {
   selectedBread   = null;
   selectedPayment = null;
   selectedJuice   = null;
-  selectedSauces  = [];
   sodaCart        = [];
+  sweetCart       = { canudo_frito: 0, barrinha_cereal: 0, brownie_chocolate: 0 };
 
-  document.querySelectorAll('.bread-card, .comp-item, .sauce-item, .juice-item, .pay-card')
+  document.querySelectorAll('.bread-card, .comp-item, .juice-item, .pay-card, .sauce-item, .sweet-card')
     .forEach(el => el.classList.remove('selected'));
   document.querySelectorAll('.comp-item')
     .forEach(el => el.classList.add('disabled'));
@@ -613,16 +903,14 @@ function resetOrderForm() {
   document.getElementById('comps-label').style.display      = 'none';
   document.getElementById('comps-grid').style.display       = 'none';
   document.getElementById('limit-warn').style.display       = 'none';
-  document.getElementById('sauce-label').style.display     = 'none';
-  document.getElementById('sauce-note').style.display      = 'none';
-  document.getElementById('sauce-grid').style.display      = 'none';
-  document.getElementById('sauce-warn').style.display      = 'none';
+  hideSauces();
   document.getElementById('order-error-box').style.display  = 'none';
   document.getElementById('soda-cups-wrap').style.display   = 'none';
   document.getElementById('soda-limit-warn').style.display  = 'none';
   document.getElementById('soda-cups-list').innerHTML       = '';
   document.getElementById('soda-count-badge').textContent   = `0/${MAX_SODAS}`;
   document.querySelectorAll('.soda-flavor-card').forEach(c => c.classList.remove('soda-disabled'));
+  renderSweets();
 
   updateJuiceLock();
   updateSummary();
@@ -635,6 +923,7 @@ function voltarInicio() {
   selectedTurma = null;
   document.querySelectorAll('.turma-chip').forEach(c => c.classList.remove('selected'));
   document.getElementById('customer-name').value          = '';
+  applyProfileNameToForm();
   document.getElementById('nome-section').style.display   = 'none';
   document.getElementById('student-status-box').innerHTML = '';
   document.getElementById('btn-continuar').style.display  = 'none';
@@ -657,6 +946,8 @@ function subscribeToOrders() {
       renderAdmin();
     }
 
+    renderProfileOrders();
+
     // Atualiza status do formulário de identificação se estiver preenchido
     const nameInput = document.getElementById('customer-name');
     if (nameInput && nameInput.value.trim().length >= 3 && selectedTurma) {
@@ -671,13 +962,13 @@ function subscribeToOrders() {
 function refreshAdmin() { renderAdmin(); }
 
 function renderAdmin() {
-  const visiveis   = allOrders.filter(o => !o.oculto);
+  const visiveis   = allOrders.filter(o => !o.oculto && o.status !== 'cancelado');
   const pago       = visiveis.filter(o => o.status === 'pago').length;
   const aguardando = visiveis.filter(o => o.status === 'aguardando_pix').length;
   const pendente   = visiveis.filter(o => o.status === 'pendente_dinheiro').length;
   const ocultos    = allOrders.filter(o => o.oculto).length;
   const arrecadado = allOrders.filter(o => o.status === 'pago').reduce((s, o) => s + o.total, 0);
-  const aReceber   = allOrders.filter(o => o.status !== 'pago' && !o.oculto).reduce((s, o) => s + o.total, 0);
+  const aReceber   = allOrders.filter(o => isOrderOpen(o) && !o.oculto).reduce((s, o) => s + o.total, 0);
 
   document.getElementById('stats-grid').innerHTML = `
     <div class="stat-card"><div class="stat-label">Total de pedidos</div><div class="stat-val orange">${allOrders.length}</div></div>
@@ -694,23 +985,28 @@ function renderAdmin() {
     const t = o.turma || 'Sem turma';
     turmaCounts[t] = (turmaCounts[t] || 0) + 1;
   });
-  const turmaEntries = Object.entries(turmaCounts).sort(([a], [b]) => a.localeCompare(b));
-  const turmasHtml = turmaEntries
-    .map(([t, c]) => `<button class="turma-badge ${currentTurmaFilter === t ? 'active' : ''}" onclick="filterByTurma(decodeURIComponent('${encodeURIComponent(t)}'))">${t}<span>${c} pedido${c !== 1 ? 's' : ''}</span></button>`)
+  const turmasHtml = Object.entries(turmaCounts)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([t, c]) => `<div class="turma-badge ${currentTurmaFilter === t ? 'active' : ''}" onclick="filterByTurma('${t}')">${t}<span>${c} pedido${c !== 1 ? 's' : ''}</span></div>`)
     .join('');
   document.getElementById('turmas-grid').innerHTML =
     turmasHtml || '<span style="color:var(--text-secondary);font-size:13px;">Nenhum pedido ainda.</span>';
 
-  const turmaSelect = document.getElementById('admin-turma-filter');
-  if (turmaSelect) {
-    const previous = currentTurmaFilter;
-    turmaSelect.innerHTML = '<option value="todas">Todas as turmas</option>' +
-      turmaEntries.map(([t]) => `<option value="${t}">${t}</option>`).join('');
-    turmaSelect.value = turmaEntries.some(([t]) => t === previous) ? previous : 'todas';
-    currentTurmaFilter = turmaSelect.value;
+  const select = document.getElementById('admin-turma-filter');
+  if (select) {
+    const turmas = [...new Set(allOrders.map(o => o.turma).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const current = currentTurmaFilter;
+    select.innerHTML = '<option value="todas">Todas as turmas</option>' + turmas.map(t => `<option value="${t}">${t}</option>`).join('');
+    select.value = turmas.includes(current) ? current : 'todas';
+    currentTurmaFilter = select.value;
   }
 
   renderOrders();
+}
+
+function filterByTurma(turma) {
+  currentTurmaFilter = turma || 'todas';
+  renderAdmin();
 }
 
 function filterOrders(status, btn) {
@@ -720,21 +1016,14 @@ function filterOrders(status, btn) {
   renderOrders();
 }
 
-function filterByTurma(turma) {
-  currentTurmaFilter = turma || 'todas';
-  const select = document.getElementById('admin-turma-filter');
-  if (select) select.value = currentTurmaFilter;
-  renderAdmin();
-}
-
 function renderOrders() {
   let filtered;
-  if (currentFilter === 'todos')   filtered = allOrders.filter(o => !o.oculto);
+  if (currentFilter === 'todos')   filtered = allOrders.filter(o => !o.oculto && o.status !== 'cancelado');
   else if (currentFilter === 'ocultos') filtered = allOrders.filter(o => o.oculto);
   else filtered = allOrders.filter(o => o.status === currentFilter && !o.oculto);
 
   if (currentTurmaFilter !== 'todas') {
-    filtered = filtered.filter(o => (o.turma || 'Sem turma') === currentTurmaFilter);
+    filtered = filtered.filter(o => o.turma === currentTurmaFilter);
   }
 
   const list = document.getElementById('order-list');
@@ -762,10 +1051,12 @@ function renderOrders() {
     const ocultarBtn = !isOculto
       ? `<button class="btn-action btn-hide" onclick="toggleOculto('${fid}')">👁 Ocultar</button>`
       : `<button class="btn-action btn-show" onclick="toggleOculto('${fid}')">↩ Mostrar</button>`;
+
     const compText = o.complements && o.complements.length ? o.complements.join(', ') : 'sem complementos extras';
-    const sauceText = o.sauces && o.sauces.length ? `Molhos: ${o.sauces.join(', ')}` : 'sem molhos';
     const sodaText = o.sodas && o.sodas.length ? o.sodas.join(', ') : null;
     const juiceText = o.juice || null;
+    const sauceText = o.sauces && o.sauces.length ? `Molhos: ${o.sauces.join(', ')}` : null;
+    const sweetText = formatSweets(o.sweets);
 
     const drinkLine = [
       juiceText ? `${juiceText} (grátis)` : null,
@@ -786,8 +1077,8 @@ function renderOrders() {
           <div>${badge}</div>
         </div>
         <div class="order-detail">
-          ${o.bread ? `Pão ${o.bread} · ${compText} · ${sauceText}` : 'Sem dogão'}<br>
-          ${drinkLine} · Pagamento: ${o.payment === 'pix' ? 'Pix' : 'Dinheiro'}
+          ${o.bread ? `Pão ${o.bread} · ${compText}` : 'Sem dogão'}${sauceText ? `<br>${sauceText}` : ''}<br>
+          ${drinkLine}${sweetText ? `<br>Doces: ${sweetText}` : ''}<br>Pagamento: ${o.payment === 'pix' ? 'Pix' : 'Dinheiro'}
         </div>
         <div class="order-footer">
           <div class="order-total">${fmtBRL(o.total)}</div>
@@ -829,7 +1120,7 @@ function logout() {
   if (confirm('Deseja realmente sair?')) signOut(auth);
 }
 
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => {
   currentUser = user;
 
   const badge = document.getElementById('user-profile-badge');
@@ -837,10 +1128,12 @@ onAuthStateChanged(auth, user => {
     badge.style.display = 'flex';
     document.getElementById('user-photo').src =
       user.photoURL || 'https://www.gstatic.com/images/branding/product/2x/avatar_anonymous_96x96dp.png';
+    await loadUserProfile(user);
   } else {
     badge.style.display = 'none';
     if (unsubOrders) { unsubOrders(); unsubOrders = null; }
     allOrders = [];
+    currentProfile = null;
   }
 
   routeUser(user);
@@ -853,10 +1146,11 @@ Object.assign(window, {
   toggleTheme, loginWithGoogle, logout,
   selecionarTurma, onNomeInput, continuar, voltarIdentificacao,
   selectBread, toggleComp, toggleSauce, selectJuice, selectPayment,
-  addSoda, removeSoda,
+  addSoda, removeSoda, addSweet, removeSweet,
   submitOrder, voltarInicio,
   refreshAdmin, filterOrders, filterByTurma,
-  confirmPayment, toggleOculto
+  confirmPayment, toggleOculto,
+  openProfile, closeProfile, saveProfileFromModal, cancelMyOrder
 });
 
 /* ══════════════════════════════════════
@@ -864,4 +1158,5 @@ Object.assign(window, {
 ══════════════════════════════════════ */
 loadTheme();
 initIdentificacao();
+renderSweets();
 updateSummary();
