@@ -2,7 +2,10 @@
 <html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>BarbosaFoods</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -15,14 +18,14 @@
       <span class="brand-name">BarbosaFoods</span>
     </div>
     <div class="topbar-right">
-      <button class="theme-toggle" onclick="toggleTheme()" title="Alternar tema">
+      <button class="theme-toggle" type="button" onclick="toggleTheme()" title="Alternar tema" aria-label="Alternar tema">
         <span id="theme-icon">☀️</span>
       </button>
       <div class="user-badge" id="user-profile-badge" style="display:none;">
-        <button class="profile-photo-button" onclick="openProfile()" title="Abrir perfil">
+        <button class="profile-photo-button" type="button" onclick="openProfile()" title="Abrir perfil" aria-label="Abrir perfil">
           <img class="user-photo" id="user-photo" src="" alt="Foto" />
         </button>
-        <button class="btn-logout" onclick="logout()" title="Sair">🚪</button>
+        <button class="btn-logout" type="button" onclick="logout()" title="Sair" aria-label="Sair">🚪</button>
       </div>
     </div>
   </header>
@@ -34,7 +37,7 @@
         <div class="login-logo">🌭</div>
         <h1 class="login-title">BarbosaFoods</h1>
         <p class="login-subtitle">Faça login com sua conta do Google para continuar</p>
-        <button class="btn-google" onclick="loginWithGoogle()">
+        <button class="btn-google" id="btn-google-login" type="button" onclick="loginWithGoogle()">
           <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -50,6 +53,36 @@
   <!-- ══════════════ VIEW: CLIENTE ══════════════ -->
   <div class="view" id="view-client">
 
+
+    <!-- TELA 0: ÁREA DO ALUNO / PEDIDOS -->
+    <div id="screen-student-home" class="client-wrap student-home-wrap" style="display:none;">
+      <div class="student-home-hero">
+        <div>
+          <div class="section-label">Minha área</div>
+          <h1 class="student-home-title">Meus pedidos</h1>
+          <p class="student-home-sub" id="student-home-sub">Veja seus pedidos anteriores e faça outro quando estiver liberado.</p>
+        </div>
+        <button class="btn-secondary" type="button" onclick="openProfile()">Editar perfil</button>
+      </div>
+
+      <div class="student-home-profile" id="student-home-profile"></div>
+
+      <div class="student-home-alert" id="student-home-alert" style="display:none;"></div>
+
+      <div class="student-home-orders-head">
+        <div>
+          <div class="profile-orders-title">Pedidos da minha conta</div>
+          <div class="student-home-count" id="student-home-count"></div>
+        </div>
+      </div>
+
+      <div class="profile-orders-list student-home-orders" id="student-home-orders-list"></div>
+
+      <div class="student-home-action">
+        <button class="btn-primary" id="btn-new-order" type="button" onclick="startNewOrder()">Fazer novo pedido →</button>
+      </div>
+    </div>
+
     <!-- TELA 1: IDENTIFICAÇÃO -->
     <div id="screen-identify" class="client-wrap">
       <div class="identify-header">
@@ -64,7 +97,7 @@
         <div class="section-label" style="margin-top:1.25rem;">2. Seu nome completo</div>
         <div class="name-input-wrap">
           <input class="name-input-field" type="text" id="customer-name"
-            placeholder="Digite seu nome completo..." oninput="onNomeInput()" autocomplete="off" />
+            placeholder="Digite seu nome completo..." oninput="onNomeInput()" autocomplete="name" autocapitalize="words" enterkeyhint="done" />
         </div>
         <div class="locked-name-hint" id="locked-name-hint" style="display:none;"></div>
         <div id="student-status-box"></div>
@@ -82,7 +115,7 @@
 
       <div class="student-pill">
         <span id="pill-name"></span>
-        <button onclick="voltarIdentificacao()">Trocar</button>
+        <button type="button" onclick="voltarIdentificacao()">Trocar</button>
       </div>
 
       <!-- PÃO (opcional) -->
@@ -346,18 +379,20 @@
         </div>
       </div>
 
-      <!-- RESUMO -->
-      <div class="summary-box">
-        <div id="summary-lines"></div>
-        <div class="sum-total">
-          <span>Total</span>
-          <span id="summary-total">R$ 0,00</span>
+      <!-- RESUMO / AÇÃO FIXA NO MOBILE -->
+      <div class="order-submit-area" id="order-submit-area">
+        <div class="summary-box">
+          <div id="summary-lines"></div>
+          <div class="sum-total">
+            <span>Total</span>
+            <span id="summary-total">R$ 0,00</span>
+          </div>
         </div>
-      </div>
 
-      <div class="error-box" id="order-error-box"></div>
-      <button class="btn-primary" id="btn-submit-order" onclick="submitOrder()">Confirmar pedido →</button>
-      <div style="height:2rem;"></div>
+        <div class="error-box" id="order-error-box"></div>
+        <button class="btn-primary" id="btn-submit-order" type="button" onclick="submitOrder()">Confirmar pedido →</button>
+      </div>
+      <div class="mobile-bottom-spacer" aria-hidden="true"></div>
     </div>
 
     <!-- TELA 3: SUCESSO -->
@@ -380,7 +415,7 @@
         <div class="info-note">Pague ao retirar o lanche. Tenha o valor exato se possível.</div>
       </div>
 
-      <button class="btn-secondary" onclick="voltarInicio()">Voltar ao início</button>
+      <button class="btn-secondary" type="button" onclick="voltarInicio()">Voltar ao início</button>
     </div>
 
   </div><!-- /view-client -->
@@ -391,9 +426,9 @@
 
       <div class="admin-header">
         <div class="admin-title">Painel de pedidos</div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn-secondary" onclick="refreshAdmin()">↺ Atualizar</button>
-          <button class="btn-secondary" onclick="syncUserOrderLocks()">🔒 Sincronizar travas</button>
+        <div class="admin-header-actions">
+          <button class="btn-secondary" type="button" onclick="refreshAdmin()">↺ Atualizar</button>
+          <button class="btn-secondary" type="button" onclick="syncUserOrderLocks()">🔒 Sincronizar travas</button>
         </div>
       </div>
 
@@ -428,7 +463,7 @@
   <div class="profile-modal" id="profile-modal" style="display:none;">
     <div class="profile-backdrop" onclick="closeProfile()"></div>
     <div class="profile-card">
-      <button class="profile-close" onclick="closeProfile()" title="Fechar" aria-label="Fechar perfil">
+      <button class="profile-close" type="button" onclick="closeProfile()" title="Fechar" aria-label="Fechar perfil">
         <svg class="remove-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.25 5.25L14.75 14.75M14.75 5.25L5.25 14.75"/></svg>
       </button>
 
@@ -443,16 +478,36 @@
       <div class="profile-section">
         <label class="profile-label" for="profile-name-input">Nome salvo</label>
         <div class="profile-name-row">
-          <input id="profile-name-input" class="profile-name-input" type="text" placeholder="Seu nome completo" />
-          <button class="btn-primary profile-save-btn" onclick="saveProfileFromModal()">Salvar</button>
+          <input id="profile-name-input" class="profile-name-input" type="text" placeholder="Seu nome completo" autocomplete="name" autocapitalize="words" enterkeyhint="done" />
         </div>
+
+        <label class="profile-label profile-label-spaced" for="profile-turma-select">Turma salva</label>
+        <select id="profile-turma-select" class="profile-name-input profile-turma-select"></select>
+
+        <button class="btn-primary profile-save-btn profile-save-wide" type="button" onclick="saveProfileFromModal()">Salvar alterações</button>
         <div class="profile-status" id="profile-save-status"></div>
-        <div class="profile-help">Esse nome fica salvo para esta conta Google. Na tela de pedido ele aparece travado para evitar pedido com outro nome.</div>
+        <div class="profile-help" id="profile-edit-help">Nome e turma ficam salvos nesta conta Google. Você pode alterar esses dados apenas uma vez por dia.</div>
       </div>
 
       <div class="profile-section">
         <div class="profile-orders-title">Meus pedidos</div>
         <div class="profile-orders-list" id="profile-orders-list"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════ MODAL: CONFIRMAR CANCELAMENTO ══════════════ -->
+  <div class="confirm-modal" id="cancel-confirm-modal" style="display:none;">
+    <div class="confirm-backdrop" onclick="closeCancelModal()"></div>
+    <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="cancel-modal-title">
+      <div class="confirm-icon">⚠️</div>
+      <div class="confirm-title" id="cancel-modal-title">Cancelar pedido?</div>
+      <div class="confirm-text" id="cancel-modal-text">Tem certeza que deseja cancelar este pedido?</div>
+      <div class="confirm-order-preview" id="cancel-modal-preview"></div>
+      <div class="confirm-actions">
+        <button class="btn-secondary" type="button" onclick="closeCancelModal()">Manter pedido</button>
+        <button class="btn-danger" id="btn-confirm-cancel-order" type="button" onclick="confirmCancelOrder()">Sim, cancelar</button>
       </div>
     </div>
   </div>
