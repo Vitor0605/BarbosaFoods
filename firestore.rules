@@ -1,0 +1,379 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email is string
+        && (
+          request.auth.token.admin == true
+          || request.auth.token.email.lower() in ['vitorjoseg4@gmail.com']
+        );
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/usuarios/$(uid);
+    }
+
+    function orderPath(orderId) {
+      return /databases/$(database)/documents/pedidos/$(orderId);
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isOwnerOrder(data) {
+      return signedIn() && data.userUid == request.auth.uid;
+    }
+
+    function requiredOrderFields() {
+      return [
+        'schemaVersion', 'name', 'turma', 'bread', 'complements', 'sauces',
+        'juice', 'sodas', 'sweets', 'payment', 'total', 'status', 'oculto',
+        'cancelado', 'timestamp', 'userUid'
+      ];
+    }
+
+    function validTurma(turma) {
+      return turma in [
+        '1°EM', '2°A EM', '2°B EM', '2°C EM', '3°A EM', '3°B EM',
+        '1°DS', '2°DS', '3°DS',
+        '1°FD', '2°FD', '3°FD',
+        '1°EST', '2°EST', '3°EST'
+      ];
+    }
+
+    function validName(name) {
+      return name is string && name.size() >= 3 && name.size() <= 80;
+    }
+
+    function breadPrice(bread) {
+      return bread == 'medio' ? 10 : bread == 'grande' ? 15 : 0;
+    }
+
+    function countItem(list, item) {
+      return list.size() - list.removeAll([item]).size();
+    }
+
+    function complementsPrice(complements) {
+      return countItem(complements, 'Batata palha extra')
+        + countItem(complements, 'Milho')
+        + countItem(complements, 'Ervilha')
+        + countItem(complements, 'Queijo ralado')
+        + (countItem(complements, 'Salsicha extra') * 2)
+        + (countItem(complements, 'Farofa') * 2);
+    }
+
+    function sweetQty(sweets, id) {
+      return sweets.get(id, 0);
+    }
+
+    function sweetUnitCount(sweets) {
+      return sweetQty(sweets, 'canudo_frito')
+        + sweetQty(sweets, 'barrinha_cereal')
+        + sweetQty(sweets, 'brownie_chocolate');
+    }
+
+    function sweetsPrice(sweets) {
+      return sweetQty(sweets, 'canudo_frito')
+        + (sweetQty(sweets, 'barrinha_cereal') * 3)
+        + (sweetQty(sweets, 'brownie_chocolate') * 5);
+    }
+
+    function calculatedTotal(data) {
+      return breadPrice(data.bread)
+        + complementsPrice(data.complements)
+        + (data.sodas.size() * 5)
+        + sweetsPrice(data.sweets);
+    }
+
+    function validComplements(data) {
+      return data.complements is list
+        && data.complements.hasOnly([
+          'Batata palha extra', 'Milho', 'Ervilha', 'Queijo ralado',
+          'Salsicha extra', 'Farofa'
+        ])
+        && data.complements.toSet().size() == data.complements.size()
+        && (
+          (data.bread == null && data.complements.size() == 0)
+          || (data.bread == 'medio' && data.complements.size() <= 3)
+          || (data.bread == 'grande' && data.complements.size() <= 6)
+        );
+    }
+
+    function validSauces(data) {
+      return data.sauces is list
+        && data.sauces.hasOnly(['Ketchup', 'Mostarda', 'Maionese'])
+        && data.sauces.toSet().size() == data.sauces.size()
+        && (
+          (data.bread == null && data.sauces.size() == 0)
+          || (data.bread in ['medio', 'grande'] && data.sauces.size() <= 3)
+        );
+    }
+
+    function validDrinks(data) {
+      return data.sodas is list
+        && data.sodas.size() <= 3
+        && data.sodas.hasOnly(['Guaraná Zero', 'Coca Zero'])
+        && (
+          (data.bread == null && data.juice == null)
+          || (data.bread in ['medio', 'grande']
+            && (data.juice == null || data.juice in [
+              'Suco de Laranja', 'Suco de Morango', 'Suco de Abacaxi'
+            ])
+          )
+        );
+    }
+
+    function validSweets(sweets) {
+      return sweets is map
+        && sweets.keys().hasOnly([
+          'canudo_frito', 'barrinha_cereal', 'brownie_chocolate'
+        ])
+        && sweetQty(sweets, 'canudo_frito') is int
+        && sweetQty(sweets, 'barrinha_cereal') is int
+        && sweetQty(sweets, 'brownie_chocolate') is int
+        && sweetQty(sweets, 'canudo_frito') >= 0
+        && sweetQty(sweets, 'barrinha_cereal') >= 0
+        && sweetQty(sweets, 'brownie_chocolate') >= 0
+        && sweetUnitCount(sweets) <= 10;
+    }
+
+    function validPaymentStatus(data) {
+      return (data.payment == 'pix' && data.status == 'aguardando_pix')
+        || (data.payment == 'dinheiro' && data.status == 'pendente_dinheiro');
+    }
+
+    function validOrderItems(data) {
+      return (data.bread == null || data.bread in ['medio', 'grande'])
+        && validComplements(data)
+        && validSauces(data)
+        && validDrinks(data)
+        && validSweets(data.sweets)
+        && (data.bread != null || data.sodas.size() > 0 || sweetUnitCount(data.sweets) > 0);
+    }
+
+    function sameUtcDate(value) {
+      return value is timestamp && value.date() == request.time.date();
+    }
+
+    function expectedDailyCount(userData) {
+      return sameUtcDate(userData.dailyOrderAt)
+        ? userData.dailyOrderCount + 1
+        : 1;
+    }
+
+    function userCanOrder(uid) {
+      let userData = get(userPath(uid)).data;
+      return userData.activeOrderId == null
+        && userData.dailyOrderCount is int
+        && expectedDailyCount(userData) <= 3;
+    }
+
+    function userOrderLockUpdated(uid, orderId) {
+      let before = get(userPath(uid)).data;
+      let after = getAfter(userPath(uid)).data;
+      return after.activeOrderId == orderId
+        && after.lastOrderId == orderId
+        && after.lastOrderCreatedAt == request.time
+        && after.dailyOrderAt == request.time
+        && after.dailyOrderCount == expectedDailyCount(before)
+        && after.updatedAt == request.time;
+    }
+
+    function validNewOrder(data, orderId) {
+      let profile = get(userPath(request.auth.uid)).data;
+      return signedIn()
+        && data.keys().hasAll(requiredOrderFields())
+        && data.keys().hasOnly(requiredOrderFields())
+        && data.schemaVersion == 2
+        && data.userUid == request.auth.uid
+        && data.name == profile.nome
+        && data.turma == profile.turma
+        && validName(data.name)
+        && validTurma(data.turma)
+        && validOrderItems(data)
+        && validPaymentStatus(data)
+        && data.total == calculatedTotal(data)
+        && data.total > 0
+        && data.oculto == false
+        && data.cancelado == false
+        && data.timestamp == request.time
+        && userCanOrder(request.auth.uid)
+        && userOrderLockUpdated(request.auth.uid, orderId);
+    }
+
+    function pendingStatus(status) {
+      return status in ['aguardando_pix', 'pendente_dinheiro'];
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function studentCancelsOwnOrder(orderId) {
+      let afterUser = getAfter(userPath(request.auth.uid)).data;
+      return isOwnerOrder(resource.data)
+        && pendingStatus(resource.data.status)
+        && resource.data.cancelado == false
+        && get(userPath(request.auth.uid)).data.activeOrderId == orderId
+        && afterUser.activeOrderId == null
+        && afterUser.updatedAt == request.time
+        && changedKeys().hasOnly(['status', 'cancelado', 'oculto', 'canceledAt'])
+        && request.resource.data.status == 'cancelado'
+        && request.resource.data.cancelado == true
+        && request.resource.data.oculto == true
+        && request.resource.data.canceledAt == request.time;
+    }
+
+    function adminUpdatesOrder() {
+      return changedKeys().hasOnly([
+          'status', 'paidAt', 'paidByUid', 'paidByEmail', 'oculto'
+        ])
+        && (
+          !changedKeys().hasAny(['status'])
+          || (
+            pendingStatus(resource.data.status)
+            && request.resource.data.status == 'pago'
+            && request.resource.data.paidAt == request.time
+            && request.resource.data.paidByUid == request.auth.uid
+            && request.resource.data.paidByEmail == request.auth.token.email
+          )
+        )
+        && (
+          !changedKeys().hasAny(['paidAt', 'paidByUid', 'paidByEmail'])
+          || (
+            request.resource.data.paidAt == request.time
+            && request.resource.data.paidByUid == request.auth.uid
+            && request.resource.data.paidByEmail == request.auth.token.email
+          )
+        );
+    }
+
+    function validProfileBase(data, uid) {
+      return data.email == request.auth.token.email
+        && data.photoURL is string
+        && data.photoURL.size() <= 2048
+        && data.googleDisplayName is string
+        && data.googleDisplayName.size() <= 120
+        && data.activeOrderId == null
+        && data.dailyOrderCount == 0
+        && data.dailyOrderAt == null
+        && data.lastOrderId == null
+        && data.lastOrderCreatedAt == null;
+    }
+
+    function validProfileIdentity(data) {
+      return (data.nome == '' || validName(data.nome))
+        && (data.turma == '' || validTurma(data.turma));
+    }
+
+    function ownerCreatesProfile(uid) {
+      return isOwner(uid)
+        && request.resource.data.keys().hasOnly([
+          'nome', 'turma', 'email', 'photoURL', 'googleDisplayName',
+          'activeOrderId', 'dailyOrderCount', 'dailyOrderAt',
+          'lastProfileEditAt', 'lastOrderId', 'lastOrderCreatedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'nome', 'turma', 'email', 'photoURL', 'googleDisplayName',
+          'activeOrderId', 'dailyOrderCount', 'dailyOrderAt',
+          'lastProfileEditAt', 'lastOrderId', 'lastOrderCreatedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && validProfileIdentity(request.resource.data)
+        && validProfileBase(request.resource.data, uid)
+        && request.resource.data.lastProfileEditAt == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function ownerRefreshesProfile() {
+      return changedKeys().hasOnly([
+          'email', 'photoURL', 'googleDisplayName', 'updatedAt'
+        ])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.photoURL is string
+        && request.resource.data.photoURL.size() <= 2048
+        && request.resource.data.googleDisplayName is string
+        && request.resource.data.googleDisplayName.size() <= 120
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function ownerEditsProfile() {
+      return changedKeys().hasOnly([
+          'nome', 'turma', 'email', 'photoURL', 'googleDisplayName',
+          'lastProfileEditAt', 'updatedAt'
+        ])
+        && validProfileIdentity(request.resource.data)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.lastProfileEditAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && (
+          !changedKeys().hasAny(['nome', 'turma'])
+          || !(resource.data.lastProfileEditAt is timestamp)
+          || resource.data.lastProfileEditAt.date() != request.time.date()
+        );
+    }
+
+    function ownerLocksNewOrder() {
+      return changedKeys().hasOnly([
+          'activeOrderId', 'lastOrderId', 'lastOrderCreatedAt',
+          'dailyOrderCount', 'dailyOrderAt', 'updatedAt'
+        ])
+        && resource.data.activeOrderId == null
+        && request.resource.data.activeOrderId is string
+        && request.resource.data.activeOrderId == request.resource.data.lastOrderId
+        && request.resource.data.lastOrderCreatedAt == request.time
+        && request.resource.data.dailyOrderAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.dailyOrderCount == expectedDailyCount(resource.data)
+        && request.resource.data.dailyOrderCount <= 3;
+    }
+
+    function ownerClearsCanceledOrder(uid) {
+      return changedKeys().hasOnly(['activeOrderId', 'updatedAt'])
+        && resource.data.activeOrderId is string
+        && request.resource.data.activeOrderId == null
+        && request.resource.data.updatedAt == request.time
+        && getAfter(orderPath(resource.data.activeOrderId)).data.userUid == uid
+        && getAfter(orderPath(resource.data.activeOrderId)).data.status == 'cancelado'
+        && getAfter(orderPath(resource.data.activeOrderId)).data.cancelado == true;
+    }
+
+    match /pedidos/{orderId} {
+      allow read: if isAdmin() || isOwnerOrder(resource.data);
+      allow create: if validNewOrder(request.resource.data, orderId);
+      allow update: if (isAdmin() && adminUpdatesOrder())
+        || studentCancelsOwnOrder(orderId);
+      allow delete: if isAdmin();
+    }
+
+    match /usuarios/{uid} {
+      allow get: if isAdmin() || isOwner(uid);
+      allow list: if isAdmin();
+      allow create: if ownerCreatesProfile(uid);
+      allow update: if isAdmin()
+        || (
+          isOwner(uid)
+          && (
+            ownerRefreshesProfile()
+            || ownerEditsProfile()
+            || ownerLocksNewOrder()
+            || ownerClearsCanceledOrder(uid)
+          )
+        );
+      allow delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
