@@ -1,0 +1,19 @@
+{
+  "name": "BarbosaFoods",
+  "short_name": "BarbosaFoods",
+  "description": "Sistema de pedidos BarbosaFoods",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
